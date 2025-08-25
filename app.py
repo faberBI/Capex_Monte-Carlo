@@ -132,13 +132,23 @@ if results:
 if results:
     st.subheader("💾 Esporta risultati")
     
-    # Converti risultati in DataFrame
-    df_results = pd.DataFrame(results)
+    # Converti risultati in DataFrame per lo sheet principale
+    df_summary = pd.DataFrame([
+        {k: v for k, v in r.items() if k != "npv_array"} for r in results
+    ])
     
-    # Bottone per scaricare
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_results.to_excel(writer, index=False, sheet_name='Risultati')
+        # Sheet principale con i dati riassuntivi
+        df_summary.to_excel(writer, index=False, sheet_name='Risultati')
+        
+        # Sheet separati per i vettori NPV di ciascun progetto
+        for r in results:
+            npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
+            # Nome sheet basato sul progetto (max 31 caratteri Excel)
+            sheet_name = r["name"][:31]
+            npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
     excel_data = output.getvalue()
     
     st.download_button(
@@ -147,5 +157,6 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
