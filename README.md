@@ -99,4 +99,7 @@ streamlit run app.py
   * **CVaR 95%**: media dei peggiori 5% scenari.
 
 ---
+## ✨ Autori
+Il progetto è stato sviluppato da:  
+- **Fabrizio Di Sciorio, PhD** – Analisi rischio e modellizzazione finanziaria  
 
