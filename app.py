@@ -2,6 +2,8 @@ import streamlit as st
 from capex.wacc import calculate_wacc
 from capex.montecarlo import run_montecarlo
 from capex.visuals import plot_npv_distribution, plot_boxplot, plot_cashflows, plot_risk_return_matrix
+import pandas as pd
+import numpy as np
 
 # init session state
 if "projects" not in st.session_state:
@@ -62,3 +64,4 @@ for i, proj in enumerate(st.session_state.projects):
 if results:
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
+
