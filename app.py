@@ -139,7 +139,6 @@ if results:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_results.to_excel(writer, index=False, sheet_name='Risultati')
-        writer.save()
     excel_data = output.getvalue()
     
     st.download_button(
@@ -148,3 +147,5 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+
