@@ -1,117 +1,102 @@
-📊 CAPEX Risk Framework con WACC & Trend Annuali
+# 📊 CAPEX Risk Framework con WACC & Trend Annuali
 
-Questo progetto fornisce un'interfaccia interattiva in Streamlit per analizzare il rischio e il rendimento di progetti d'investimento CAPEX utilizzando simulazioni Monte Carlo, tenendo conto del WACC, dei trend annuali di prezzi, quantità e costi fissi.
+Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento di progetti di investimento **CAPEX** tramite **simulazioni Monte Carlo**, considerando il **WACC**, i trend annuali di prezzi, quantità e costi fissi.
 
-🔹 Funzionalità principali
+---
 
-Aggiunta progetti
+## 🔹 Funzionalità principali
 
-Possibilità di aggiungere progetti multipli con parametri personalizzabili.
+### ➕ Gestione Progetti
 
-Parametri finanziari
+* Creazione di progetti multipli con parametri personalizzabili.
+* Confronto tra progetti tramite **matrice rischio-rendimento**.
 
-Equity / Debito
+### 💰 Parametri Finanziari
 
-Costo dell’Equity (ke) e del Debito (kd)
+* Struttura del capitale: **Equity / Debito**.
+* **Costo dell’Equity (ke)** e **del Debito (kd)**.
+* **Tax rate**.
+* **CAPEX iniziale**.
+* **Orizzonte temporale (anni)**.
+* **Calcolo automatico del WACC**.
 
-Tax rate
+### 📈 Parametri Ricavi
 
-CAPEX iniziale
+* Prezzo e quantità configurabili con distribuzioni:
 
-Orizzonte temporale (anni)
+  * Normale
+  * Triangolare (p1, p2, p3)
+  * Lognormale
+  * Uniforme
+* Trend annuali di prezzo e quantità (anche negativi).
 
-Calcolo automatico del WACC.
+### 🏭 Parametri Costi
 
-Parametri ricavi
+* Costi variabili (% sui ricavi).
+* Costi fissi annuali.
+* Trend inflazione costi fissi per anno.
 
-Prezzo e quantità configurabili con distribuzioni: Normale, Triangolare, Lognormale, Uniforme.
+### 🎲 Simulazione Monte Carlo
 
-Parametri della distribuzione personalizzabili (p1, p2, p3 per triangolare).
+* Numero simulazioni configurabile.
+* Indicatori di rischio:
 
-Parametri costi
+  * **NPV** (Net Present Value).
+  * **CaR (Capital at Risk 95%)**.
+  * **Probabilità NPV < 0**.
+  * **CVaR (Conditional VaR 95%)**.
 
-Costi variabili (% sui ricavi)
+### 📊 Visualizzazioni
 
-Costi fissi annuali
+* Distribuzione NPV (**istogramma**).
+* **Boxplot** NPV.
+* **Cash flow annuo medio** (bar chart).
+* **Matrice rischio-rendimento** per confronto progetti.
 
-Trend di inflazione dei costi fissi anno per anno.
+---
 
-Trend annuali
+## 🔹 Tecnologie
 
-Crescita di prezzo e quantità per ciascun anno.
+* Python 3.x
+* Streamlit
+* NumPy
+* Matplotlib
 
-Possibilità di trend negativo.
+---
 
-Simulazione Monte Carlo
+## 🔹 Come usare
 
-Numero di simulazioni configurabile.
+### 1. Installare le dipendenze
 
-Calcolo NPV, CaR (95%), probabilità di NPV < 0 e Conditional VaR (CVaR).
-
-Visualizzazioni
-
-Distribuzione NPV (istogramma)
-
-Boxplot NPV
-
-Cash flow annuo medio (bar chart)
-
-Matrice rischio-rendimento per confronto tra progetti
-
-🔹 Tecnologie
-
-Python 3.x
-
-Streamlit
-
-NumPy
-
-Matplotlib
-
-🔹 Come usare
-
-Installare le dipendenze:
-
+```bash
 pip install streamlit numpy matplotlib
+```
 
+### 2. Eseguire l’applicazione
 
-Eseguire l'applicazione:
-
+```bash
 streamlit run app.py
+```
 
+### 3. Interfaccia interattiva
 
-Interfaccia interattiva:
+* Cliccare su **➕ Aggiungi progetto**.
+* Configurare parametri **finanziari, ricavi, costi, trend**.
+* Impostare numero simulazioni Monte Carlo.
+* Visualizzare **risultati e grafici**.
 
-Cliccare su ➕ Aggiungi progetto per creare un nuovo progetto.
+---
 
-Configurare i parametri finanziari, ricavi, costi e trend annuali.
+## 🔹 Note metodologiche
 
-Impostare il numero di simulazioni Monte Carlo.
+* Ricavi e quantità generati tramite distribuzioni casuali definite dall’utente.
+* Il **WACC** calcolato automaticamente da equity, debito e rispettivi costi.
+* Simulazione Monte Carlo con NPV scontato al WACC.
+* Indicatori di rischio:
 
-Visualizzare i risultati e i grafici generati.
+  * **CaR 95%**: differenza tra NPV atteso e 5° percentile.
+  * **Probabilità NPV < 0**.
+  * **CVaR 95%**: media dei peggiori 5% scenari.
 
-🔹 Note metodologiche
+---
 
-I ricavi e le quantità sono generati tramite distribuzioni casuali definite dall’utente.
-
-Il WACC viene calcolato automaticamente in base al peso di equity e debito e ai relativi costi.
-
-La simulazione Monte Carlo considera le variazioni casuali dei ricavi e calcola il NPV scontato con il WACC.
-
-Gli indicatori di rischio includono:
-
-CaR (Capital at Risk) 95%: differenza tra NPV atteso e il 5° percentile
-
-Probabilità NPV < 0
-
-Conditional VaR (CVaR 95%): media dei peggiori 5% scenari
-
-🔹 Possibili sviluppi futuri
-
-Aggiunta di più tipologie di distribuzioni casuali.
-
-Esportazione dei risultati in CSV o Excel.
-
-Integrazione con dashboard interattive avanzate.
-
-Supporto per analisi multi-progetto con correlazioni tra flussi di cassa.
