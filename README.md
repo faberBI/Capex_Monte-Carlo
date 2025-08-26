@@ -61,6 +61,7 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 * Streamlit
 * NumPy
 * Matplotlib
+* Open AI
 
 ---
 
@@ -84,6 +85,7 @@ streamlit run app.py
 * Configurare parametri **finanziari, ricavi, costi, trend**.
 * Impostare numero simulazioni Monte Carlo.
 * Visualizzare **risultati e grafici**.
+* GPT integrato per commento ed analisi dei **risultati**.
 
 ---
 
