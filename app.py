@@ -14,7 +14,7 @@ from capex.visuals import (
     plot_risk_return_matrix
 )
 
-api_key = "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"
+api_key = "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"
 
 # ------------------ Helper per sample dalle distribuzioni ------------------
 def sample(dist_obj):
@@ -210,6 +210,7 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
