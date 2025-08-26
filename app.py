@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import io
 import pandas as pd
-from openai import OpenAI
+import time
+from openai import OpenAI, OpenAIError
 
 from capex.wacc import calculate_wacc
 from capex.montecarlo import run_montecarlo
@@ -160,25 +161,21 @@ Fornisci un commento sintetico e professionale, evidenziando:
 """
 
     if st.button("💬 Genera commento GPT"):
-        import time
-        from openai.error import RateLimitError
-
-        # Retry semplice per RateLimitError
-        for _ in range(3):
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                st.subheader("📑 Commento di GPT")
-                st.write(response.choices[0].message.content)
-                break
-            except RateLimitError:
-                st.warning("Rate limit superato, riprovo tra 5 secondi...")
-                time.sleep(5)
+    for _ in range(3):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            st.subheader("📑 Commento di GPT")
+            st.write(response.choices[0].message.content)
+            break
+        except OpenAIError as e:
+            st.warning("Errore OpenAI (es. rate limit), riprovo tra 5 secondi...")
+            time.sleep(5)
 
 # ------------------ Export risultati in Excel ------------------
 if results:
@@ -209,6 +206,7 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
