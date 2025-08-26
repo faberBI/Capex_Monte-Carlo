@@ -13,6 +13,8 @@ from capex.visuals import (
     plot_risk_return_matrix
 )
 
+api_key = st.secrets.get("OPENAI_API_KEY")
+
 # ------------------ Helper per sample dalle distribuzioni ------------------
 def sample(dist_obj):
     if dist_obj["dist"] == "Normale":
@@ -130,7 +132,7 @@ if results:
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
 
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    client = OpenAI(api_key=api_key)
     # Prepara un riassunto dei risultati da passare a GPT
     df_summary = pd.DataFrame([
         {k: v for k, v in r.items() if k != "npv_array"} for r in results
@@ -188,6 +190,7 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
