@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import io
 import pandas as pd
+from openai import OpenAI
 
 from capex.wacc import calculate_wacc
 from capex.montecarlo import run_montecarlo
@@ -128,6 +129,36 @@ for i, proj in enumerate(st.session_state.projects):
 if results:
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
+
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    # Prepara un riassunto dei risultati da passare a GPT
+    df_summary = pd.DataFrame([
+        {k: v for k, v in r.items() if k != "npv_array"} for r in results
+    ])
+
+    prompt = f"""
+    Ecco i risultati dell'analisi di Capex@Risk tramite metodo Monte Carlo sui progetti, con rischio e rendimento:
+
+    {df_summary.to_string(index=False)}
+
+    Fornisci un commento sintetico e professionale, evidenziando:
+    - Quali progetti hanno il miglior trade-off rischio/rendimento.
+    - La robustezza dei NPV stimati.
+    - Eventuali rischi particolari emersi dalla simulazione.
+    """
+
+    if st.button("💬 Genera commento GPT"):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",   # modello leggero e veloce
+            messages=[
+                {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        st.subheader("📑 Commento di GPT")
+        st.write(response.choices[0].message.content)
+
 # ------------------ Export risultati in Excel ------------------
 if results:
     st.subheader("💾 Esporta risultati")
@@ -157,6 +188,7 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
