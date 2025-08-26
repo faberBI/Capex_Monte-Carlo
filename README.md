@@ -53,11 +53,11 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 * **Cash flow annuo medio** (bar chart).
 * **Matrice rischio-rendimento** per confronto progetti.
 
----
-
 ### 🤖 Open AI
 
 * Commento risultati generato da **GPT** a partire dalle simulazioni Monte Carlo.
+
+---
 
 ## 🔹 Tecnologie
 
