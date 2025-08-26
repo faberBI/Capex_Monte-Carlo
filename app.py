@@ -132,34 +132,53 @@ if results:
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
 
+    # Crea client OpenAI
     client = OpenAI(api_key=api_key)
-    # Prepara un riassunto dei risultati da passare a GPT
-    df_summary = pd.DataFrame([
-        {k: v for k, v in r.items() if k != "npv_array"} for r in results
+
+    # Prepara un riassunto sintetico da passare a GPT (escludendo npv_array)
+    summary_df = pd.DataFrame([
+        {
+            "name": r["name"],
+            "expected_npv": r["expected_npv"],
+            "car": r["car"],
+            "downside_prob": r["downside_prob"],
+            "cvar": r["cvar"],
+            "avg_yearly_cashflow": np.mean(r["yearly_cash_flows"])
+        }
+        for r in results
     ])
 
     prompt = f"""
-    Ecco i risultati dell'analisi di Capex@Risk tramite metodo Monte Carlo sui progetti, con rischio e rendimento:
+Ecco i risultati sintetici dei progetti (Monte Carlo CAPEX Risk):
 
-    {df_summary.to_string(index=False)}
+{summary_df.to_string(index=False)}
 
-    Fornisci un commento sintetico e professionale, evidenziando:
-    - Quali progetti hanno il miglior trade-off rischio/rendimento.
-    - La robustezza dei NPV stimati.
-    - Eventuali rischi particolari emersi dalla simulazione.
-    """
+Fornisci un commento sintetico e professionale, evidenziando:
+- Miglior trade-off rischio/rendimento.
+- Robustezza dei NPV stimati.
+- Eventuali rischi particolari emersi dalle simulazioni.
+"""
 
     if st.button("💬 Genera commento GPT"):
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",   # modello leggero e veloce
-            messages=[
-                {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+        import time
+        from openai.error import RateLimitError
 
-        st.subheader("📑 Commento di GPT")
-        st.write(response.choices[0].message.content)
+        # Retry semplice per RateLimitError
+        for _ in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                st.subheader("📑 Commento di GPT")
+                st.write(response.choices[0].message.content)
+                break
+            except RateLimitError:
+                st.warning("Rate limit superato, riprovo tra 5 secondi...")
+                time.sleep(5)
 
 # ------------------ Export risultati in Excel ------------------
 if results:
@@ -190,6 +209,7 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
