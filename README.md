@@ -55,6 +55,10 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 
 ---
 
+### 🤖 Open AI
+
+* Commento risultati generato da **GPT** a partire dalle simulazioni Monte Carlo.
+
 ## 🔹 Tecnologie
 
 * Python 3.x
