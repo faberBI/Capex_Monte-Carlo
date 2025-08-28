@@ -15,7 +15,7 @@ from capex.visuals import (
 )
 api_key = "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"
 
-# ------------------ Helper per sample dalle distribuzioni ------------------
+# ------------------ Helper per sample distribuzioni ------------------
 def sample(dist_obj):
     if dist_obj["dist"] == "Normale":
         return np.random.normal(dist_obj["p1"], dist_obj["p2"])
@@ -45,6 +45,7 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
+        "capex_rec": [0.0]*10,  # lista default
         "revenues": {
             "price": {"dist": "Normale", "p1": 100.0, "p2": 10.0},
             "quantity": {"dist": "Normale", "p1": 1000.0, "p2": 100.0}
@@ -56,7 +57,8 @@ def add_project():
     })
 
 # ------------------ UI ------------------
-st.title("📊 CAPEX Risk Framework con WACC & Trend annuali")
+st.title("📊 CAPEX Risk Framework con WACC & CAPEX Ricorrente")
+
 st.button("➕ Aggiungi progetto", on_click=add_project)
 n_sim = st.slider("Numero simulazioni Monte Carlo", 1000, 1000_000, 10_000)
 
@@ -73,7 +75,20 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # Parametri ricavi
+        # ------------------ CAPEX Ricorrente per anno ------------------
+        st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
+        df_capex = pd.DataFrame({
+            "Anno": list(range(1, proj["years"]+1)),
+            "CAPEX Ricorrente": proj.get("capex_rec", [0.0]*proj["years"])
+        })
+        df_capex_edit = st.data_editor(
+            df_capex,
+            key=f"capex_rec_{i}",
+            num_rows="dynamic"
+        )
+        proj["capex_rec"] = df_capex_edit["CAPEX Ricorrente"].tolist()
+
+        # ------------------ Ricavi ------------------
         st.subheader("📈 Ricavi")
         for key, label in [("price", "Prezzo"), ("quantity", "Quantità")]:
             dist = st.selectbox(
@@ -92,12 +107,12 @@ for i, proj in enumerate(st.session_state.projects):
                     key=f"{key}_p3_{i}"
                 )
 
-        # Parametri costi
+        # ------------------ Costi ------------------
         st.subheader("💸 Costi")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
-        # Trend annuali con slider step 5%
+        # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0]*proj["years"])
         proj.setdefault("quantity_growth", [0.0]*proj["years"])
@@ -126,7 +141,7 @@ for i, proj in enumerate(st.session_state.projects):
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
 
-# ------------------ Avvio simulazioni con pulsante ------------------
+# ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
     results = []
     for proj in st.session_state.projects:
@@ -221,4 +236,3 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
