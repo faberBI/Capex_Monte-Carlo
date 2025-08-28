@@ -76,17 +76,27 @@ for i, proj in enumerate(st.session_state.projects):
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
         # ------------------ CAPEX Ricorrente per anno ------------------
+        # ------------------ CAPEX Ricorrente per anno ------------------
         st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
+
+# Riallinea capex_rec alla lunghezza degli anni
+        if len(proj["capex_rec"]) < proj["years"]:
+            proj["capex_rec"] += [0.0] * (proj["years"] - len(proj["capex_rec"]))
+        elif len(proj["capex_rec"]) > proj["years"]:
+            proj["capex_rec"] = proj["capex_rec"][:proj["years"]]
+
         df_capex = pd.DataFrame({
-            "Anno": list(range(1, proj["years"]+1)),
-            "CAPEX Ricorrente": proj.get("capex_rec", [0.0]*proj["years"])
+        "Anno": list(range(1, proj["years"]+1)),
+        "CAPEX Ricorrente": proj["capex_rec"]
         })
+
         df_capex_edit = st.data_editor(
-            df_capex,
-            key=f"capex_rec_{i}",
-            num_rows="dynamic"
+        df_capex,
+        key=f"capex_rec_{i}",
+        num_rows="dynamic"
         )
         proj["capex_rec"] = df_capex_edit["CAPEX Ricorrente"].tolist()
+
 
         # ------------------ Ricavi ------------------
         st.subheader("📈 Ricavi")
@@ -236,3 +246,4 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
