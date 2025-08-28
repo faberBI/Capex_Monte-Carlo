@@ -13,7 +13,6 @@ from capex.visuals import (
     plot_cashflows,
     plot_risk_return_matrix
 )
-
 api_key = "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"
 
 # ------------------ Helper per sample dalle distribuzioni ------------------
@@ -32,6 +31,8 @@ def sample(dist_obj):
 # ------------------ Session state ------------------
 if "projects" not in st.session_state:
     st.session_state.projects = []
+if "results" not in st.session_state:
+    st.session_state.results = None
 
 # ------------------ Funzione per aggiungere progetto ------------------
 def add_project():
@@ -58,8 +59,6 @@ def add_project():
 st.title("📊 CAPEX Risk Framework con WACC & Trend annuali")
 st.button("➕ Aggiungi progetto", on_click=add_project)
 n_sim = st.slider("Numero simulazioni Monte Carlo", 1000, 1000_000, 10_000)
-
-results = []
 
 # ------------------ Loop progetti ------------------
 for i, proj in enumerate(st.session_state.projects):
@@ -98,45 +97,65 @@ for i, proj in enumerate(st.session_state.projects):
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
-        # Trend annuali
+        # Trend annuali con slider step 5%
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0]*proj["years"])
         proj.setdefault("quantity_growth", [0.0]*proj["years"])
         proj.setdefault("fixed_cost_inflation", [0.0]*proj["years"])
         for t in range(proj["years"]):
-            proj["price_growth"][t] = st.number_input(f"Crescita prezzo anno {t+1}", value=proj["price_growth"][t], step=0.001, format="%.3f", key=f"pg_{i}_{t}")
-            proj["quantity_growth"][t] = st.number_input(f"Crescita quantità anno {t+1}", value=proj["quantity_growth"][t], step=0.001, format="%.3f", key=f"qg_{i}_{t}")
-            proj["fixed_cost_inflation"][t] = st.number_input(f"Crescita costi fissi anno {t+1}", value=proj["fixed_cost_inflation"][t], step=0.001, format="%.3f", key=f"fi_{i}_{t}")
+            proj["price_growth"][t] = st.slider(
+                f"Crescita prezzo anno {t+1} (%)",
+                min_value=-0.5, max_value=0.5,
+                value=proj["price_growth"][t],
+                step=0.05, key=f"pg_{i}_{t}"
+            )
+            proj["quantity_growth"][t] = st.slider(
+                f"Crescita quantità anno {t+1} (%)",
+                min_value=-0.5, max_value=0.5,
+                value=proj["quantity_growth"][t],
+                step=0.05, key=f"qg_{i}_{t}"
+            )
+            proj["fixed_cost_inflation"][t] = st.slider(
+                f"Crescita costi fissi anno {t+1} (%)",
+                min_value=-0.5, max_value=0.5,
+                value=proj["fixed_cost_inflation"][t],
+                step=0.05, key=f"fi_{i}_{t}"
+            )
 
         # WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
 
-    # ------------------ Simulazione Monte Carlo ------------------
-    sim_result = run_montecarlo(proj, n_sim, wacc)
-    results.append({"name": proj["name"], **sim_result})
+# ------------------ Avvio simulazioni con pulsante ------------------
+if st.button("▶️ Avvia simulazioni"):
+    results = []
+    for proj in st.session_state.projects:
+        wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
+        sim_result = run_montecarlo(proj, n_sim, wacc)
+        results.append({"name": proj["name"], **sim_result})
 
-    # ------------------ Grafici ------------------
-    st.subheader(f"📊 Risultati {proj['name']}")
-    st.write(f"Expected NPV: {sim_result['expected_npv']:.2f}")
-    st.write(f"CaR (95%): {sim_result['car']:.2f}")
-    st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
-    st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
+        st.subheader(f"📊 Risultati {proj['name']}")
+        st.write(f"Expected NPV: {sim_result['expected_npv']:.2f}")
+        st.write(f"CaR (95%): {sim_result['car']:.2f}")
+        st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
+        st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
 
-    st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
-                                    np.percentile(sim_result["npv_array"], 5), proj["name"]))
-    st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
-    st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
+        st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
+                                        np.percentile(sim_result["npv_array"], 5), proj["name"]))
+        st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
+        st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
+
+    st.session_state.results = results
 
 # ------------------ Matrice rischio-rendimento ------------------
-if results:
+if st.session_state.results:
+    results = st.session_state.results
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
 
     # Crea client OpenAI
     client = OpenAI(api_key=api_key)
 
-    # Prepara un riassunto sintetico da passare a GPT (escludendo npv_array)
     summary_df = pd.DataFrame([
         {
             "name": r["name"],
@@ -161,10 +180,6 @@ Fornisci un commento sintetico e professionale, evidenziando:
 """
 
     if st.button("💬 Genera commento GPT"):
-        import time
-        from openai import OpenAIError
-
-        # Retry semplice per eventuali RateLimitError o altri errori OpenAI
         for _ in range(3):
             try:
                 response = client.chat.completions.create(
@@ -182,23 +197,19 @@ Fornisci un commento sintetico e professionale, evidenziando:
                 time.sleep(5)
 
 # ------------------ Export risultati in Excel ------------------
-if results:
+if st.session_state.results:
+    results = st.session_state.results
     st.subheader("💾 Esporta risultati")
     
-    # Converti risultati in DataFrame per lo sheet principale
     df_summary = pd.DataFrame([
         {k: v for k, v in r.items() if k != "npv_array"} for r in results
     ])
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Sheet principale con i dati riassuntivi
         df_summary.to_excel(writer, index=False, sheet_name='Risultati')
-        
-        # Sheet separati per i vettori NPV di ciascun progetto
         for r in results:
             npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
-            # Nome sheet basato sul progetto (max 31 caratteri Excel)
             sheet_name = r["name"][:31]
             npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
             
@@ -210,13 +221,4 @@ if results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-
-
-
-
-
-
-
-
 
