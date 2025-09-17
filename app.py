@@ -156,28 +156,35 @@ for i, proj in enumerate(st.session_state.projects):
 # ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
     results = []
+
     for proj in st.session_state.projects:
+        # Calcolo WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
+
+        # Simulazione Monte Carlo
         sim_result = run_montecarlo(proj, n_sim, wacc)
         results.append({"name": proj["name"], **sim_result})
 
+        # Visualizzazione risultati numerici
         st.subheader(f"📊 Risultati {proj['name']}")
         st.write(f"Expected NPV: {sim_result['expected_npv']:.2f}")
         st.write(f"CaR (95%): {sim_result['car']:.2f}")
         st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
         st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
 
+        # Grafici NPV e cashflows
         st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
                                         np.percentile(sim_result["npv_array"], 5), proj["name"]))
         st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
-        # 🔥 Tachimetro rischio (KRI) basato su CaR
+
+        # 🔥 Gauge CaR % vs Expected NPV
         st.plotly_chart(
             plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]),
             use_container_width=True
-            )
+        )
 
-        # Testo sintetico KRI
+        # KRI sintetico testuale
         car_pct = sim_result["car"] / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
         if car_pct > 0.5:
             kri_text = "🔴 Rischio Alto"
@@ -188,8 +195,9 @@ if st.button("▶️ Avvia simulazioni"):
 
         st.markdown(f"**KRI sintetico:** {kri_text} ({car_pct*100:.1f}% del valore atteso)")
 
-                    
+    # Salva risultati in sessione
     st.session_state.results = results
+
 
 # ------------------ Matrice rischio-rendimento ------------------
 if st.session_state.results:
@@ -265,6 +273,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
