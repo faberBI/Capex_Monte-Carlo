@@ -183,7 +183,7 @@ if st.button("▶️ Avvia simulazioni"):
             kri_text = "🟢 Rischio Basso"
 
         st.markdown(f"**KRI sintetico:** {kri_text}")
-                    )
+                    
     st.session_state.results = results
 
 # ------------------ Matrice rischio-rendimento ------------------
@@ -260,6 +260,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
