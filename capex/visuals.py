@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import plotly.graph_objects as go
+
 
 def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
     fig, ax = plt.subplots()
@@ -49,6 +52,7 @@ def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
     """
     Gauge dinamico: colora il rischio in base al CaR confrontato con la distribuzione NPV.
     """
+    npv_array = np.array(npv_array)
     p33, p66 = get_dynamic_thresholds(npv_array)
 
     if car_value <= p33:
@@ -80,6 +84,7 @@ def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
         }
     ))
     return fig
+
 
 
 
