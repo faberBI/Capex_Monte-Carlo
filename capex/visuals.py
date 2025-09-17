@@ -50,18 +50,13 @@ def get_dynamic_thresholds(npv_array):
 
 def plot_car_kri(car_value, cap_invested, project_name):
     """
-    Gauge dinamico per KRI basato sul CaR rispetto al capitale investito.
+    Gauge intuitivo per KRI basato sul Capital at Risk (CaR).
     """
-    # -----------------------------
-    # Definizione soglie in % del capitale investito
-    # -----------------------------
-    soglia_alta = 0.5 * cap_invested     # >50% capitale a rischio = alto
-    soglia_media = 0.25 * cap_invested   # 25-50% = medio
-    # <25% = basso
+    # Definizione soglie
+    soglia_alta = 0.3 * cap_invested
+    soglia_media = 0.15 * cap_invested
 
-    # -----------------------------
-    # Determina livello rischio e colore
-    # -----------------------------
+    # Determina livello di rischio e colore
     if car_value > soglia_alta:
         risk_level = "Alto"
         color = "red"
@@ -72,18 +67,14 @@ def plot_car_kri(car_value, cap_invested, project_name):
         risk_level = "Basso"
         color = "green"
 
-    # -----------------------------
-    # Creo gauge
-    # -----------------------------
     fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
+        mode="gauge+number",
         value=car_value,
-        number={'prefix': "$", 'font': {'color': color, 'size': 28}},
-        delta={'reference': cap_invested, 'increasing': {'color': 'red'}, 'position': "top"},
-        title={'text': f"KRI - {project_name} ({risk_level})", 'font': {'size': 20}},
+        number={'prefix': "$", 'font': {'color': color, 'size': 30}},
+        title={'text': f"Capital at Risk ({project_name}) - {risk_level}", 'font': {'size': 22}},
         gauge={
             'axis': {'range': [0, cap_invested], 'tickprefix': "$", 'tickcolor': "darkblue"},
-            'bar': {'color': color, 'thickness': 0.3},  # barra che indica il CaR
+            'bar': {'color': color, 'thickness': 0.3},  # freccia/barra
             'steps': [
                 {'range': [0, soglia_media], 'color': "green"},
                 {'range': [soglia_media, soglia_alta], 'color': "yellow"},
@@ -97,8 +88,12 @@ def plot_car_kri(car_value, cap_invested, project_name):
         }
     ))
 
-    fig.update_layout(paper_bgcolor='white', font={'color': "darkblue", 'family': "Arial"})
-    
+    fig.update_layout(
+        paper_bgcolor='white',
+        font={'color': "darkblue", 'family': "Arial"},
+        height=350
+    )
+
     return fig
 
 
