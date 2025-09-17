@@ -11,7 +11,9 @@ from capex.visuals import (
     plot_npv_distribution,
     plot_boxplot,
     plot_cashflows,
-    plot_risk_return_matrix
+    plot_risk_return_matrix,
+    get_dynamic_thresholds,
+    plot_risk_gauge_dynamic
 )
 api_key = "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"
 
@@ -169,7 +171,11 @@ if st.button("▶️ Avvia simulazioni"):
                                         np.percentile(sim_result["npv_array"], 5), proj["name"]))
         st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
-
+        # 🔥 Tachimetro rischio (KRI) basato su CaR
+        st.plotly_chart(
+            plot_risk_gauge_dynamic(sim_result["car"], sim_result["npv_array"], proj["name"]),
+            use_container_width=True
+                        )
     st.session_state.results = results
 
 # ------------------ Matrice rischio-rendimento ------------------
@@ -246,4 +252,5 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
