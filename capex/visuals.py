@@ -96,11 +96,8 @@ def plot_car_kri(car_value, cap_invested, project_name):
         height=450,
     )
 
-    # Aggiunta annotazioni per maggiore chiarezza
-    fig.add_annotation(text=f"Capitale investito: ${cap_invested:,.0f}",
-                       x=0.5, y=0.1, showarrow=False, font={'size': 16, 'color': 'darkblue'})
-
     return fig
+
 
 
 
