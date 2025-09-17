@@ -51,14 +51,10 @@ def plot_car_kri(car_value, expected_npv, project_name):
     """
     Gauge professionale: CaR % rispetto all'Expected NPV.
     """
-    # Calcola CaR in percentuale
-    if expected_npv <= 0:  
-        # fallback per progetti con valore atteso negativo o nullo
-        car_pct = 1.0  
-    else:
-        car_pct = car_value / expected_npv  
+    # Calcola CaR in percentuale rispetto al valore atteso
+    car_pct = car_value / expected_npv if expected_npv != 0 else 1.0  # fallback per expected_npv=0
 
-    # Soglie (% del valore atteso)
+    # Soglie (%) del valore atteso
     soglia_alta = 0.5    # 50%
     soglia_media = 0.25  # 25%
 
@@ -76,16 +72,16 @@ def plot_car_kri(car_value, expected_npv, project_name):
     # Gauge circolare in percentuale
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=car_pct * 100,  # valore %
+        value=car_pct * 100,  # valore in %
         number={'suffix': "%", 'font': {'size': 36, 'color': color}},
         title={'text': f"{project_name} - CaR% ({risk_level})", 'font': {'size': 22}},
         gauge={
-            'axis': {'range': [0, 100], 'suffix': "%"},
+            'axis': {'range': [0, 100], 'suffix': "%", 'tickcolor': "darkblue"},
             'bar': {'color': "black", 'thickness': 0.05},  # freccia
             'steps': [
-                {'range': [0, soglia_media * 100], 'color': "#d1fae5"},   # verde chiaro
-                {'range': [soglia_media * 100, soglia_alta * 100], 'color': "#fef08a"},  # giallo chiaro
-                {'range': [soglia_alta * 100, 100], 'color': "#fecaca"}   # rosso chiaro
+                {'range': [0, soglia_media*100], 'color': "#d1fae5"},    # verde chiaro
+                {'range': [soglia_media*100, soglia_alta*100], 'color': "#fef08a"},  # giallo chiaro
+                {'range': [soglia_alta*100, 100], 'color': "#fecaca"}    # rosso chiaro
             ],
             'threshold': {
                 'line': {'color': color, 'width': 6},
@@ -102,6 +98,8 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
+
+
 
 
 
