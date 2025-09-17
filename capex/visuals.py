@@ -37,10 +37,13 @@ def plot_risk_return_matrix(results):
 def get_dynamic_thresholds(npv_array):
     """
     Calcola le soglie per rischio (basso, medio, alto) dai percentili del NPV simulato.
+    Converte npv_array in NumPy array se necessario.
     """
+    npv_array = np.array(npv_array)  # ✅ Assicurati che sia NumPy array
     p33 = np.percentile(npv_array, 33)
     p66 = np.percentile(npv_array, 66)
     return p33, p66
+
 
 def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
     """
@@ -77,5 +80,6 @@ def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
         }
     ))
     return fig
+
 
 
