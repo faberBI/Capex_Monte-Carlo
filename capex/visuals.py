@@ -47,45 +47,50 @@ def get_dynamic_thresholds(npv_array):
     p66 = np.percentile(npv_array, 66)
     return p33, p66
 
-def plot_car_kri(car_value, cap_invested, project_name):
+def plot_car_kri(car_value, expected_npv, project_name):
     """
-    Gauge professionale: Capital at Risk (CaR) vs capitale investito.
-    Aspetto stile cruscotto finanziario.
+    Gauge professionale: CaR % rispetto all'Expected NPV.
     """
-    # Soglie
-    soglia_alta = 0.5 * cap_invested
-    soglia_media = 0.25 * cap_invested
+    # Calcola CaR in percentuale
+    if expected_npv <= 0:  
+        # fallback per progetti con valore atteso negativo o nullo
+        car_pct = 1.0  
+    else:
+        car_pct = car_value / expected_npv  
+
+    # Soglie (% del valore atteso)
+    soglia_alta = 0.5    # 50%
+    soglia_media = 0.25  # 25%
 
     # Colore rischio
-    if car_value > soglia_alta:
+    if car_pct > soglia_alta:
         risk_level = "Alto"
         color = "#ef4444"  # rosso
-    elif car_value > soglia_media:
+    elif car_pct > soglia_media:
         risk_level = "Medio"
         color = "#facc15"  # giallo
     else:
         risk_level = "Basso"
         color = "#22c55e"  # verde
 
-    # Creazione gauge circolare stile tachimetro
+    # Gauge circolare in percentuale
     fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
-        value=car_value,
-        number={'prefix': "$", 'font': {'size': 36, 'color': color}},
-        delta={'reference': cap_invested, 'increasing': {'color': 'red'}, 'position': "top"},
-        title={'text': f"{project_name} - CaR ({risk_level})", 'font': {'size': 22}},
+        mode="gauge+number",
+        value=car_pct * 100,  # valore %
+        number={'suffix': "%", 'font': {'size': 36, 'color': color}},
+        title={'text': f"{project_name} - CaR% ({risk_level})", 'font': {'size': 22}},
         gauge={
-            'axis': {'range': [0, cap_invested], 'tickprefix': "$", 'tickcolor': "darkblue"},
-            'bar': {'color': "black", 'thickness': 0.05},  # freccia sottile
+            'axis': {'range': [0, 100], 'suffix': "%"},
+            'bar': {'color': "black", 'thickness': 0.05},  # freccia
             'steps': [
-                {'range': [0, soglia_media], 'color': "#d1fae5"},  # verde chiaro
-                {'range': [soglia_media, soglia_alta], 'color': "#fef08a"},  # giallo chiaro
-                {'range': [soglia_alta, cap_invested], 'color': "#fecaca"}  # rosso chiaro
+                {'range': [0, soglia_media * 100], 'color': "#d1fae5"},   # verde chiaro
+                {'range': [soglia_media * 100, soglia_alta * 100], 'color': "#fef08a"},  # giallo chiaro
+                {'range': [soglia_alta * 100, 100], 'color': "#fecaca"}   # rosso chiaro
             ],
             'threshold': {
                 'line': {'color': color, 'width': 6},
                 'thickness': 0.8,
-                'value': car_value
+                'value': car_pct * 100
             }
         }
     ))
@@ -97,6 +102,7 @@ def plot_car_kri(car_value, cap_invested, project_name):
     )
 
     return fig
+
 
 
 
