@@ -173,11 +173,17 @@ if st.button("▶️ Avvia simulazioni"):
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
         # 🔥 Tachimetro rischio (KRI) basato su CaR
         st.plotly_chart(
-            plot_risk_gauge_dynamic(sim_result["car"], sim_result["npv_array"], proj["name"]),
-            use_container_width=True)
-        if sim_result["car"] <= np.percentile(sim_result["npv_array"], 33):
+        plot_car_kri(sim_result["car"], proj["capex"], proj["name"]),
+        use_container_width=True
+            )
+
+        # Testo sintetico KRI    
+        soglia_alta = 0.5 * proj["capex"]
+        soglia_media = 0.25 * proj["capex"]
+
+        if sim_result["car"] > soglia_alta:
             kri_text = "🔴 Rischio Alto"
-        elif sim_result["car"] <= np.percentile(sim_result["npv_array"], 66):
+        elif sim_result["car"] > soglia_media:
             kri_text = "🟡 Rischio Medio"
         else:
             kri_text = "🟢 Rischio Basso"
@@ -260,6 +266,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
