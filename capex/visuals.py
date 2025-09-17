@@ -49,7 +49,8 @@ def get_dynamic_thresholds(npv_array):
 
 def plot_car_kri(car_value, expected_npv, project_name):
     """
-    Gauge professionale: Capital at Risk (CaR) vs Expected NPV (%).
+    Gauge professionale: Capital at Risk (CaR) vs Expected NPV (%),
+    con titolo chiaro KRI - Nome Progetto e livello di rischio.
     """
     soglia_alta = 0.5
     soglia_media = 0.25
@@ -71,7 +72,10 @@ def plot_car_kri(car_value, expected_npv, project_name):
         value=car_pct*100,
         number={'suffix': "%", 'font': {'size': 36, 'color': color}},
         delta={'reference': 100, 'increasing': {'color': 'red'}, 'position': "top"},
-        title={'text': f"{project_name} - CaR ({risk_level})", 'font': {'size': 22}},
+        title={
+            'text': f"KRI - {project_name}: {risk_level}",
+            'font': {'size': 22, 'color': "darkblue"}
+        },
         gauge={
             'axis': {
                 'range': [0, 100],
@@ -99,6 +103,8 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
+
+
 
 
 
