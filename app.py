@@ -77,7 +77,7 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # ------------------ CAPEX Ricorrente per anno ------------------
+        
         # ------------------ CAPEX Ricorrente per anno ------------------
         st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
 
@@ -266,6 +266,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
