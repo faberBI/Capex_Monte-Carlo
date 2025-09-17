@@ -33,3 +33,49 @@ def plot_risk_return_matrix(results):
     ax.set_title("Matrice rischio-rendimento")
     ax.legend()
     return fig
+
+def get_dynamic_thresholds(npv_array):
+    """
+    Calcola le soglie per rischio (basso, medio, alto) dai percentili del NPV simulato.
+    """
+    p33 = np.percentile(npv_array, 33)
+    p66 = np.percentile(npv_array, 66)
+    return p33, p66
+
+def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
+    """
+    Gauge dinamico: colora il rischio in base al CaR confrontato con la distribuzione NPV.
+    """
+    p33, p66 = get_dynamic_thresholds(npv_array)
+
+    if car_value <= p33:
+        risk_level = "Alto"
+        color = "red"
+    elif car_value <= p66:
+        risk_level = "Medio"
+        color = "yellow"
+    else:
+        risk_level = "Basso"
+        color = "green"
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=car_value,
+        title={'text': f"Rischio {project_name} ({risk_level})"},
+        gauge={
+            'axis': {'range': [np.min(npv_array), np.max(npv_array)]},
+            'bar': {'color': color},
+            'steps': [
+                {'range': [np.min(npv_array), p33], 'color': "red"},
+                {'range': [p33, p66], 'color': "yellow"},
+                {'range': [p66, np.max(npv_array)], 'color': "green"},
+            ],
+            'threshold': {
+                'line': {'color': "black", 'width': 4},
+                'value': car_value
+            }
+        }
+    ))
+    return fig
+
+
