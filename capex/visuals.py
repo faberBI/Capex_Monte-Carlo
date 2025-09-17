@@ -54,8 +54,8 @@ def plot_car_kri(car_value, cap_invested, project_name):
     Mostra una freccia, colori graduali e numero evidenziato.
     """
     # Soglie % del capitale investito
-    soglia_alta = 0.3 * cap_invested
-    soglia_media = 0.15 * cap_invested
+    soglia_alta = 0.5 * cap_invested
+    soglia_media = 0.25 * cap_invested
 
     # Determina colore e livello di rischio
     if car_value > soglia_alta:
@@ -98,6 +98,7 @@ def plot_car_kri(car_value, cap_invested, project_name):
     )
 
     return fig
+
 
 
 
