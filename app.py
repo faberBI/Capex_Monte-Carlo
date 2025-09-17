@@ -174,8 +174,16 @@ if st.button("▶️ Avvia simulazioni"):
         # 🔥 Tachimetro rischio (KRI) basato su CaR
         st.plotly_chart(
             plot_risk_gauge_dynamic(sim_result["car"], sim_result["npv_array"], proj["name"]),
-            use_container_width=True
-                        )
+            use_container_width=True)
+        if sim_result["car"] <= np.percentile(sim_result["npv_array"], 33):
+            kri_text = "🔴 Rischio Alto"
+        elif sim_result["car"] <= np.percentile(sim_result["npv_array"], 66):
+            kri_text = "🟡 Rischio Medio"
+        else:
+            kri_text = "🟢 Rischio Basso"
+
+        st.markdown(f"**KRI sintetico:** {kri_text}")
+                    )
     st.session_state.results = results
 
 # ------------------ Matrice rischio-rendimento ------------------
@@ -252,5 +260,6 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
