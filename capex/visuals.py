@@ -48,42 +48,59 @@ def get_dynamic_thresholds(npv_array):
     return p33, p66
 
 
-def plot_risk_gauge_dynamic(car_value, npv_array, project_name):
+def plot_car_kri(car_value, cap_invested, project_name):
     """
-    Gauge dinamico: colora il rischio in base al CaR confrontato con la distribuzione NPV.
+    Gauge dinamico per KRI basato sul CaR rispetto al capitale investito.
     """
-    npv_array = np.array(npv_array)
-    p33, p66 = get_dynamic_thresholds(npv_array)
+    # -----------------------------
+    # Definizione soglie in % del capitale investito
+    # -----------------------------
+    soglia_alta = 0.5 * cap_invested     # >50% capitale a rischio = alto
+    soglia_media = 0.25 * cap_invested   # 25-50% = medio
+    # <25% = basso
 
-    if car_value <= p33:
+    # -----------------------------
+    # Determina livello rischio e colore
+    # -----------------------------
+    if car_value > soglia_alta:
         risk_level = "Alto"
         color = "red"
-    elif car_value <= p66:
+    elif car_value > soglia_media:
         risk_level = "Medio"
         color = "yellow"
     else:
         risk_level = "Basso"
         color = "green"
 
+    # -----------------------------
+    # Creo gauge
+    # -----------------------------
     fig = go.Figure(go.Indicator(
-        mode="gauge+number",
+        mode="gauge+number+delta",
         value=car_value,
-        title={'text': f"Rischio {project_name} ({risk_level})"},
+        number={'prefix': "$", 'font': {'color': color, 'size': 28}},
+        delta={'reference': cap_invested, 'increasing': {'color': 'red'}, 'position': "top"},
+        title={'text': f"KRI - {project_name} ({risk_level})", 'font': {'size': 20}},
         gauge={
-            'axis': {'range': [np.min(npv_array), np.max(npv_array)]},
-            'bar': {'color': color},
+            'axis': {'range': [0, cap_invested], 'tickprefix': "$", 'tickcolor': "darkblue"},
+            'bar': {'color': color, 'thickness': 0.3},  # barra che indica il CaR
             'steps': [
-                {'range': [np.min(npv_array), p33], 'color': "red"},
-                {'range': [p33, p66], 'color': "yellow"},
-                {'range': [p66, np.max(npv_array)], 'color': "green"},
+                {'range': [0, soglia_media], 'color': "green"},
+                {'range': [soglia_media, soglia_alta], 'color': "yellow"},
+                {'range': [soglia_alta, cap_invested], 'color': "red"}
             ],
             'threshold': {
                 'line': {'color': "black", 'width': 4},
+                'thickness': 0.75,
                 'value': car_value
             }
         }
     ))
+
+    fig.update_layout(paper_bgcolor='white', font={'color': "darkblue", 'family': "Arial"})
+    
     return fig
+
 
 
 
