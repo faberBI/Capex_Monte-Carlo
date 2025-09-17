@@ -51,7 +51,6 @@ def plot_car_kri(car_value, expected_npv, project_name):
     """
     Gauge professionale: Capital at Risk (CaR) vs Expected NPV (%).
     """
-    # Calcolo soglie in % del valore atteso
     soglia_alta = 0.5
     soglia_media = 0.25
 
@@ -59,27 +58,31 @@ def plot_car_kri(car_value, expected_npv, project_name):
 
     if car_pct > soglia_alta:
         risk_level = "Alto"
-        color = "#ef4444"  # rosso
+        color = "#ef4444"
     elif car_pct > soglia_media:
         risk_level = "Medio"
-        color = "#facc15"  # giallo
+        color = "#facc15"
     else:
         risk_level = "Basso"
-        color = "#22c55e"  # verde
+        color = "#22c55e"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
-        value=car_pct*100,  # in %
+        value=car_pct*100,
         number={'suffix': "%", 'font': {'size': 36, 'color': color}},
         delta={'reference': 100, 'increasing': {'color': 'red'}, 'position': "top"},
         title={'text': f"{project_name} - CaR ({risk_level})", 'font': {'size': 22}},
         gauge={
-            'axis': {'range': [0, 100]},  # scala in %
+            'axis': {
+                'range': [0, 100],
+                'tickvals': [0, 20, 40, 60, 80, 100],
+                'ticktext': ["0%", "20%", "40%", "60%", "80%", "100%"]
+            },
             'bar': {'color': "black", 'thickness': 0.05},
             'steps': [
-                {'range': [0, soglia_media*100], 'color': "#d1fae5"},  # verde chiaro
-                {'range': [soglia_media*100, soglia_alta*100], 'color': "#fef08a"},  # giallo chiaro
-                {'range': [soglia_alta*100, 100], 'color': "#fecaca"}  # rosso chiaro
+                {'range': [0, soglia_media*100], 'color': "#d1fae5"},
+                {'range': [soglia_media*100, soglia_alta*100], 'color': "#fef08a"},
+                {'range': [soglia_alta*100, 100], 'color': "#fecaca"}
             ],
             'threshold': {
                 'line': {'color': color, 'width': 6},
@@ -96,6 +99,7 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
+
 
 
 
