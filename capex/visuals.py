@@ -2,30 +2,59 @@ import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 
-
+# ------------------ Distribuzione NPV ------------------
 def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
+    npv_array = np.array(npv_array)
     fig, ax = plt.subplots()
-    ax.hist(npv_array, bins=50, alpha=0.7)
+    ax.hist(npv_array, bins=50, alpha=0.7, color="#3b82f6", edgecolor="black")
     ax.axvline(expected_npv, color="g", linestyle="--", label="Expected NPV")
     ax.axvline(percentile_5, color="r", linestyle="--", label="VaR 95%")
     ax.set_title(f"Distribuzione NPV - {name}")
+    ax.set_xlabel("NPV")
+    ax.set_ylabel("Frequenza")
     ax.legend()
     return fig
 
+# ------------------ Boxplot NPV ------------------
 def plot_boxplot(npv_array, name):
+    npv_array = np.array(npv_array)
     fig, ax = plt.subplots()
-    ax.boxplot(npv_array)
+    ax.boxplot(npv_array, patch_artist=True,
+               boxprops=dict(facecolor="#3b82f6", color="black"),
+               medianprops=dict(color="red"))
     ax.set_title(f"Boxplot NPV - {name}")
+    ax.set_ylabel("NPV")
     return fig
 
+# ------------------ Cashflows ------------------
 def plot_cashflows(yearly_cash_flows, years, name):
+    """
+    yearly_cash_flows può essere:
+    - 1D: valori medi per anno
+    - 2D: simulazioni x anni
+    Viene sempre plottata la media con banda di confidenza 5%-95%.
+    """
+    yearly_cash_flows = np.array(yearly_cash_flows)
+    
+    if yearly_cash_flows.ndim == 1:
+        mean_cf = yearly_cash_flows
+        low_cf = yearly_cash_flows
+        high_cf = yearly_cash_flows
+    else:
+        mean_cf = np.mean(yearly_cash_flows, axis=0)
+        low_cf = np.percentile(yearly_cash_flows, 5, axis=0)
+        high_cf = np.percentile(yearly_cash_flows, 95, axis=0)
+    
     fig, ax = plt.subplots()
-    ax.bar(range(1, years+1), yearly_cash_flows)
+    ax.bar(range(1, years+1), mean_cf, color="#3b82f6", alpha=0.7, label="Cash Flow Medio")
+    ax.fill_between(range(1, years+1), low_cf, high_cf, color="#93c5fd", alpha=0.4, label="5%-95% intervallo")
     ax.set_xlabel("Anno")
-    ax.set_ylabel("Cash Flow Medio")
+    ax.set_ylabel("Cash Flow")
     ax.set_title(f"Cash Flow annuo medio - {name}")
+    ax.legend()
     return fig
 
+# ------------------ Matrice rischio-rendimento ------------------
 def plot_risk_return_matrix(results):
     fig, ax = plt.subplots()
     for r in results:
@@ -37,21 +66,15 @@ def plot_risk_return_matrix(results):
     ax.legend()
     return fig
 
+# ------------------ Soglie rischio ------------------
 def get_dynamic_thresholds(npv_array):
-    """
-    Calcola le soglie per rischio (basso, medio, alto) dai percentili del NPV simulato.
-    Converte npv_array in NumPy array se necessario.
-    """
-    npv_array = np.array(npv_array)  # ✅ Assicurati che sia NumPy array
+    npv_array = np.array(npv_array)
     p33 = np.percentile(npv_array, 33)
     p66 = np.percentile(npv_array, 66)
     return p33, p66
 
+# ------------------ KRI Gauge ------------------
 def plot_car_kri(car_value, expected_npv, project_name):
-    """
-    Gauge professionale: Capital at Risk (CaR) vs Expected NPV (%),
-    con titolo chiaro KRI - Nome Progetto e livello di rischio.
-    """
     soglia_alta = 0.5
     soglia_media = 0.25
 
@@ -77,11 +100,7 @@ def plot_car_kri(car_value, expected_npv, project_name):
             'font': {'size': 22, 'color': "darkblue"}
         },
         gauge={
-            'axis': {
-                'range': [0, 100],
-                'tickvals': [0, 20, 40, 60, 80, 100],
-                'ticktext': ["0%", "20%", "40%", "60%", "80%", "100%"]
-            },
+            'axis': {'range': [0, 100]},
             'bar': {'color': "black", 'thickness': 0.05},
             'steps': [
                 {'range': [0, soglia_media*100], 'color': "#d1fae5"},
@@ -103,21 +122,3 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
