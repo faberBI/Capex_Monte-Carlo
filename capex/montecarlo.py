@@ -5,10 +5,9 @@ from .costs import compute_costs
 def run_montecarlo(proj, n_sim, wacc):
     npv_list = []
     yearly_cash_flows = np.zeros(proj["years"])
-
     depreciation = proj["capex"] / proj["years"]  # ammortamento lineare
 
-    # capex ricorrente: lista lunga "years", default tutti 0
+    # CAPEX ricorrente
     if isinstance(proj.get("capex_rec", 0), (int, float)):
         capex_rec = [proj.get("capex_rec", 0)] * proj["years"]
     else:
@@ -16,24 +15,31 @@ def run_montecarlo(proj, n_sim, wacc):
 
     for _ in range(n_sim):
         cash_flows = []
+
         for t in range(1, proj["years"]+1):
             # --- Ricavi ---
             price = sample(proj["revenues"]["price"]) * (1 + proj["price_growth"][t-1])
             quantity = sample(proj["revenues"]["quantity"]) * (1 + proj["quantity_growth"][t-1])
             revenue = price * quantity
 
-            # --- Opex ---
+            # --- Costi variabili/fissi ---
+            fixed_sample = sample(proj.get("costs_fixed", {"dist": "Normale", "p1": proj["costs"]["fixed"], "p2": 0}))
             total_cost = compute_costs(
                 revenue,
                 proj["costs"]["var_pct"],
-                proj["costs"]["fixed"],
+                fixed_sample,
                 proj["fixed_cost_inflation"][t-1]
             )
 
-            # --- EBIT ---
-            ebit = revenue - total_cost - depreciation
+            # --- Costi aggiuntivi stocastici ---
+            extra_costs = 0.0
+            for oc in proj.get("other_costs", []):
+                extra_costs += sample(oc)
 
-            # --- Taxes ---
+            # --- EBIT ---
+            ebit = revenue - total_cost - extra_costs - depreciation
+
+            # --- Tasse ---
             taxes = max(0, ebit) * proj["tax"]
 
             # --- Free Cash Flow ---
@@ -44,8 +50,8 @@ def run_montecarlo(proj, n_sim, wacc):
         yearly_cash_flows += np.array(cash_flows) / n_sim
 
         # NPV scontato
-        discounted = [cf / ((1+wacc)**t) for t, cf in enumerate(cash_flows, start=1)]
-        npv = sum(discounted) - proj["capex"]
+        discounted = [cf / ((1 + wacc) ** t) for t, cf in enumerate(cash_flows, start=1)]
+        npv = sum(discounted) - proj["capex"]  # CAPEX iniziale sottratto una sola volta
         npv_list.append(npv)
 
     npv_array = np.array(npv_list)
@@ -63,3 +69,5 @@ def run_montecarlo(proj, n_sim, wacc):
         "cvar": cvar,
         "yearly_cash_flows": yearly_cash_flows
     }
+
+
