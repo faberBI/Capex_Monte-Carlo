@@ -20,9 +20,17 @@ api_key = st.secrets["OPENAI_API_KEY"]
 # ------------------ Helper per sample distribuzioni ------------------
 def sample(dist_obj, year_idx=None):
     """Campiona un valore dalla distribuzione. Se dist_obj è lista, usa year_idx."""
-    if isinstance(dist_obj, list) and year_idx is not None:
-        dist_obj = dist_obj[year_idx]
+    if dist_obj is None:
+        # Se non c'è niente, restituisci 0
+        return 0.0
 
+    if isinstance(dist_obj, list):
+        if year_idx is not None:
+            dist_obj = dist_obj[year_idx]
+        else:
+            raise ValueError("year_idx è richiesto se dist_obj è una lista")
+
+    # ora dist_obj è un dizionario
     dist_type = dist_obj.get("dist", "Normale")
     p1 = dist_obj.get("p1", 0.0)
     p2 = dist_obj.get("p2", 0.0)
@@ -38,6 +46,7 @@ def sample(dist_obj, year_idx=None):
         return np.random.uniform(p1, p2)
     else:
         return p1
+
 
 # ------------------ Session state ------------------
 if "projects" not in st.session_state:
@@ -323,6 +332,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
