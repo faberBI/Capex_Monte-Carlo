@@ -3,8 +3,7 @@ from .revenues import sample
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
 
-import numpy as np
-from .sample import sample  # usa la versione corretta che ti ho dato prima
+from .app import sample 
 
 def run_montecarlo(proj, n_sim, wacc):
     """
@@ -74,6 +73,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "downside_prob": downside_prob,
         "cvar": cvar
     }
+
 
 
 
