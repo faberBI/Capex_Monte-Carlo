@@ -56,7 +56,7 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
-        "capex_rec": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(10)],
+        "capex_rec": None,  # inizialmente None, verrà aggiunto con pulsante
         "revenues_list": [
             {
                 "name": "Ricavo 1",
@@ -90,15 +90,19 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # ------------------ CAPEX Ricorrente ------------------
+        # ------------------ CAPEX Ricorrente con pulsante ------------------
         st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
-        while len(proj["capex_rec"]) < proj["years"]:
-            proj["capex_rec"].append({"dist":"Normale","p1":0.0,"p2":0.0})
-        if len(proj["capex_rec"]) > proj["years"]:
-            proj["capex_rec"] = proj["capex_rec"][:proj["years"]]
-        df_capex = pd.DataFrame([{"Anno": y+1, **proj["capex_rec"][y]} for y in range(proj["years"])])
-        df_capex_edit = st.data_editor(df_capex, key=f"capex_rec_{i}", num_rows="dynamic")
-        proj["capex_rec"] = df_capex_edit.drop(columns="Anno").to_dict(orient="records")
+        if proj["capex_rec"] is None:
+            if st.button(f"➕ Aggiungi CAPEX Ricorrente al progetto {proj['name']}", key=f"add_capex_rec_{i}"):
+                proj["capex_rec"] = [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
+        if proj["capex_rec"] is not None:
+            while len(proj["capex_rec"]) < proj["years"]:
+                proj["capex_rec"].append({"dist":"Normale","p1":0.0,"p2":0.0})
+            if len(proj["capex_rec"]) > proj["years"]:
+                proj["capex_rec"] = proj["capex_rec"][:proj["years"]]
+            df_capex = pd.DataFrame([{"Anno": y+1, **proj["capex_rec"][y]} for y in range(proj["years"])])
+            df_capex_edit = st.data_editor(df_capex, key=f"capex_rec_{i}", num_rows="dynamic")
+            proj["capex_rec"] = df_capex_edit.drop(columns="Anno").to_dict(orient="records")
 
         # ------------------ Ricavi multipli ------------------
         st.subheader("📈 Ricavi")
@@ -250,3 +254,4 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
