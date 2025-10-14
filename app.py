@@ -124,6 +124,37 @@ for i, proj in enumerate(st.session_state.projects):
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
+        st.subheader("📉 Costi aggiuntivi")
+        
+        proj.setdefault("other_costs", [])
+        
+        # Mostra e modifica i costi esistenti
+        for j, cost in enumerate(proj["other_costs"]):
+            cost["name"] = st.text_input(f"Nome costo {j+1}", value=cost["name"], key=f"oc_name_{i}_{j}")
+            cost["dist"] = st.selectbox(
+                f"Distribuzione costo {cost['name']}",
+                ["Normale","Triangolare","Lognormale","Uniforme"],
+                index=["Normale","Triangolare","Lognormale","Uniforme"].index(cost["dist"]),
+                key=f"oc_dist_{i}_{j}"
+            )
+            cost["p1"] = st.number_input(f"{cost['name']} - Param 1", value=cost["p1"], key=f"oc_p1_{i}_{j}")
+            cost["p2"] = st.number_input(f"{cost['name']} - Param 2", value=cost["p2"], key=f"oc_p2_{i}_{j}")
+            if cost["dist"] == "Triangolare":
+                cost["p3"] = st.number_input(
+                    f"{cost['name']} - Param 3",
+                    value=cost.get("p3", cost["p1"] + cost["p2"]),
+                    key=f"oc_p3_{i}_{j}"
+                )
+            
+        # Bottone per aggiungere un nuovo costo stocastico
+        if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
+            proj["other_costs"].append({
+                "name": f"Costo {len(proj['other_costs'])+1}",
+                "dist": "Normale",
+                "p1": 0.0,
+                "p2": 0.0
+            })
+
         # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0]*proj["years"])
@@ -273,6 +304,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
