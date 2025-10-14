@@ -75,24 +75,30 @@ def get_dynamic_thresholds(npv_array):
 
 # ------------------ KRI Gauge ------------------
 def plot_car_kri(car_value, expected_npv, project_name):
+    """
+    Gauge professionale: KRI = rischio di perdita rispetto all'NPV atteso (%).
+    Utilizza la formula corretta: KRI = (Expected NPV - CaR) / Expected NPV
+    """
+    # Calcolo KRI corretto
+    kri_pct = (expected_npv - car_value) / expected_npv if expected_npv != 0 else 1.0
+
+    # Soglie rischio
     soglia_alta = 0.5
     soglia_media = 0.25
 
-    car_pct = car_value / expected_npv if expected_npv != 0 else 1.0
-
-    if car_pct > soglia_alta:
+    if kri_pct > soglia_alta:
         risk_level = "Alto"
-        color = "#ef4444"
-    elif car_pct > soglia_media:
+        color = "#ef4444"  # rosso
+    elif kri_pct > soglia_media:
         risk_level = "Medio"
-        color = "#facc15"
+        color = "#facc15"  # giallo
     else:
         risk_level = "Basso"
-        color = "#22c55e"
+        color = "#22c55e"  # verde
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
-        value=car_pct*100,
+        value=kri_pct*100,
         number={'suffix': "%", 'font': {'size': 36, 'color': color}},
         delta={'reference': 100, 'increasing': {'color': 'red'}, 'position': "top"},
         title={
@@ -100,7 +106,11 @@ def plot_car_kri(car_value, expected_npv, project_name):
             'font': {'size': 22, 'color': "darkblue"}
         },
         gauge={
-            'axis': {'range': [0, 100]},
+            'axis': {
+                'range': [0, 100],
+                'tickvals': [0, 20, 40, 60, 80, 100],
+                'ticktext': ["0%", "20%", "40%", "60%", "80%", "100%"]
+            },
             'bar': {'color': "black", 'thickness': 0.05},
             'steps': [
                 {'range': [0, soglia_media*100], 'color': "#d1fae5"},
@@ -110,7 +120,7 @@ def plot_car_kri(car_value, expected_npv, project_name):
             'threshold': {
                 'line': {'color': color, 'width': 6},
                 'thickness': 0.8,
-                'value': car_pct*100
+                'value': kri_pct*100
             }
         }
     ))
@@ -122,3 +132,5 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
+
+
