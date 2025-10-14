@@ -56,7 +56,7 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
-        "capex_rec": None,  # inizialmente None, verrà aggiunto con pulsante
+        "capex_rec": None,
         "revenues_list": [
             {
                 "name": "Ricavo 1",
@@ -90,33 +90,67 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # ------------------ CAPEX Ricorrente con pulsante ------------------
+        # ------------------ CAPEX Ricorrente con pulsante e distribuzione ------------------
         st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
         if proj["capex_rec"] is None:
-            if st.button(f"➕ Aggiungi CAPEX Ricorrente al progetto {proj['name']}", key=f"add_capex_rec_{i}"):
-                proj["capex_rec"] = [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
+            if st.button(f"➕ Aggiungi CAPEX Ricorrente", key=f"add_capex_rec_{i}"):
+                proj["capex_rec"] = [{"dist":"Normale","p1":0.0,"p2":0.0,"p3":0.0} for _ in range(proj["years"])]
         if proj["capex_rec"] is not None:
-            while len(proj["capex_rec"]) < proj["years"]:
-                proj["capex_rec"].append({"dist":"Normale","p1":0.0,"p2":0.0})
-            if len(proj["capex_rec"]) > proj["years"]:
-                proj["capex_rec"] = proj["capex_rec"][:proj["years"]]
-            df_capex = pd.DataFrame([{"Anno": y+1, **proj["capex_rec"][y]} for y in range(proj["years"])])
-            df_capex_edit = st.data_editor(df_capex, key=f"capex_rec_{i}", num_rows="dynamic")
-            proj["capex_rec"] = df_capex_edit.drop(columns="Anno").to_dict(orient="records")
+            for y in range(proj["years"]):
+                st.markdown(f"**Anno {y+1}**")
+                dist_type = st.selectbox(
+                    "Distribuzione",
+                    ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                    index=["Normale","Triangolare","Lognormale","Uniforme"].index(proj["capex_rec"][y]["dist"]),
+                    key=f"capex_dist_{i}_{y}"
+                )
+                proj["capex_rec"][y]["dist"] = dist_type
+                if dist_type == "Normale":
+                    proj["capex_rec"][y]["p1"] = st.number_input("Media (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
+                    proj["capex_rec"][y]["p2"] = st.number_input("Deviazione standard (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
+                elif dist_type == "Triangolare":
+                    proj["capex_rec"][y]["p1"] = st.number_input("Minimo (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
+                    proj["capex_rec"][y]["p2"] = st.number_input("Modal (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
+                    proj["capex_rec"][y]["p3"] = st.number_input("Massimo (p3)", value=proj["capex_rec"][y].get("p3",0.0), key=f"capex_p3_{i}_{y}")
+                elif dist_type == "Lognormale":
+                    proj["capex_rec"][y]["p1"] = st.number_input("Media log (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
+                    proj["capex_rec"][y]["p2"] = st.number_input("Deviazione log (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
+                elif dist_type == "Uniforme":
+                    proj["capex_rec"][y]["p1"] = st.number_input("Minimo (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
+                    proj["capex_rec"][y]["p2"] = st.number_input("Massimo (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
 
-        # ------------------ Ricavi multipli ------------------
+        # ------------------ Ricavi multipli con distribuzione ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
-            for key, label in [("price", "Prezzo"), ("quantity", "Quantità")]:
-                df_rev = pd.DataFrame([{"Anno": y+1, **rev[key][y]} for y in range(proj["years"])])
-                df_rev_edit = st.data_editor(df_rev, key=f"{key}_{i}_{j}", num_rows="dynamic")
-                rev[key] = df_rev_edit.drop(columns="Anno").to_dict(orient="records")
+            for key in ["price","quantity"]:
+                for y in range(proj["years"]):
+                    st.markdown(f"Anno {y+1} - {key}")
+                    dist_type = st.selectbox(
+                        "Distribuzione",
+                        ["Normale","Triangolare","Lognormale","Uniforme"],
+                        index=["Normale","Triangolare","Lognormale","Uniforme"].index(rev[key][y]["dist"]),
+                        key=f"{key}_dist_{i}_{j}_{y}"
+                    )
+                    rev[key][y]["dist"] = dist_type
+                    if dist_type == "Normale":
+                        rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                    elif dist_type == "Triangolare":
+                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3",0.0), key=f"{key}_p3_{i}_{j}_{y}")
+                    elif dist_type == "Lognormale":
+                        rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                    elif dist_type == "Uniforme":
+                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
                 "name": f"Ricavo {len(proj['revenues_list'])+1}",
-                "price": [{"dist":"Normale","p1":100.0,"p2":10.0} for _ in range(proj["years"])],
-                "quantity": [{"dist":"Normale","p1":1000.0,"p2":100.0} for _ in range(proj["years"])]
+                "price": [{"dist":"Normale","p1":100.0,"p2":10.0,"p3":0.0} for _ in range(proj["years"])],
+                "quantity": [{"dist":"Normale","p1":1000.0,"p2":100.0,"p3":0.0} for _ in range(proj["years"])]
             })
 
         # ------------------ Costi ------------------
@@ -124,16 +158,27 @@ for i, proj in enumerate(st.session_state.projects):
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
-        # ------------------ Costi aggiuntivi ------------------
+        # ------------------ Costi aggiuntivi con name ------------------
         st.subheader("📉 Costi aggiuntivi")
         proj.setdefault("other_costs", [])
         for j, cost in enumerate(proj["other_costs"]):
-            st.markdown(f"**{cost['name']}**")
-            df_cost = pd.DataFrame([{"Anno": y+1, **cost[y]} for y in range(proj["years"])])
-            df_cost_edit = st.data_editor(df_cost, key=f"oc_{i}_{j}", num_rows="dynamic")
-            proj["other_costs"][j] = df_cost_edit.drop(columns="Anno").to_dict(orient="records")
+            if isinstance(cost, dict):
+                st.markdown(f"**{cost.get('name', f'Costo {j+1}')}**")
+                for y in range(proj["years"]):
+                    dist_type = st.selectbox(
+                        "Distribuzione",
+                        ["Normale","Triangolare","Lognormale","Uniforme"],
+                        index=["Normale","Triangolare","Lognormale","Uniforme"].index(cost["values"][y]["dist"]),
+                        key=f"oc_dist_{i}_{j}_{y}"
+                    )
+                    cost["values"][y]["dist"] = dist_type
+                    # gestione parametri come sopra...
+            else:
+                # se cost è lista, converti in dict con name
+                proj["other_costs"][j] = {"name": f"Costo {j+1}", "values": cost}
+
         if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
-            proj["other_costs"].append([{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])])
+            proj["other_costs"].append({"name": f"Costo {len(proj['other_costs'])+1}", "values":[{"dist":"Normale","p1":0.0,"p2":0.0,"p3":0.0} for _ in range(proj["years"])]})
 
         # ------------------ Ammortamento ------------------
         st.subheader("🏗️ Ammortamento (Depreciation)")
@@ -254,4 +299,5 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
