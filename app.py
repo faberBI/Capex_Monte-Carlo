@@ -19,23 +19,28 @@ api_key = st.secrets["OPENAI_API_KEY"]
 
 # ------------------ Helper per sample distribuzioni ------------------
 def sample(dist_obj, year_idx=None):
-    """Campiona un valore dalla distribuzione. Se dist_obj è lista, usa year_idx."""
-    if dist_obj is None:
-        # Se non c'è niente, restituisci 0
-        return 0.0
-
+    """
+    Campiona un valore da una distribuzione.
+    
+    dist_obj può essere:
+    - un dizionario singolo: {"dist": "Normale", "p1": ..., "p2": ..., "p3": ...}
+    - una lista di dizionari per anno, in tal caso serve year_idx
+    
+    year_idx: indice dell'anno (0-based) se dist_obj è lista
+    """
+    # Se è una lista di distribuzioni per anno, seleziona quella giusta
     if isinstance(dist_obj, list):
-        if year_idx is not None:
-            dist_obj = dist_obj[year_idx]
-        else:
-            raise ValueError("year_idx è richiesto se dist_obj è una lista")
+        if year_idx is None:
+            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
+        dist_obj = dist_obj[year_idx]
 
-    # ora dist_obj è un dizionario
+    # Parametri della distribuzione
     dist_type = dist_obj.get("dist", "Normale")
     p1 = dist_obj.get("p1", 0.0)
     p2 = dist_obj.get("p2", 0.0)
-    p3 = dist_obj.get("p3", p1 + p2)
+    p3 = dist_obj.get("p3", p1 + p2)  # solo per triangolare
 
+    # Campionamento
     if dist_type == "Normale":
         return np.random.normal(p1, p2)
     elif dist_type == "Triangolare":
@@ -45,7 +50,7 @@ def sample(dist_obj, year_idx=None):
     elif dist_type == "Uniforme":
         return np.random.uniform(p1, p2)
     else:
-        return p1
+        raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 
 # ------------------ Session state ------------------
@@ -332,6 +337,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
