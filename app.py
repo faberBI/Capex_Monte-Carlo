@@ -15,7 +15,7 @@ from capex.visuals import (
     plot_car_kri
 )
 
-api_key = "YOUR_OPENAI_API_KEY_HERE"
+api_key = st.secrets["OPENAI_API_KEY"]
 
 # ------------------ Helper per sample distribuzioni ------------------
 def sample(dist_obj):
@@ -48,10 +48,13 @@ def add_project():
         "capex": 200.0,
         "years": 10,
         "capex_rec": [0.0]*10,
-        "revenues": {
-            "price": {"dist": "Normale", "p1": 100.0, "p2": 10.0},
-            "quantity": {"dist": "Normale", "p1": 1000.0, "p2": 100.0}
-        },
+        "revenues_list": [
+            {
+                "name": "Ricavo 1",
+                "price": {"dist": "Normale", "p1": 100.0, "p2": 10.0},
+                "quantity": {"dist": "Normale", "p1": 1000.0, "p2": 100.0}
+            }
+        ],
         "costs": {"var_pct": 0.08, "fixed": -50.0},
         "other_costs": [],
         "price_growth": [0.01]*10,
@@ -84,31 +87,38 @@ for i, proj in enumerate(st.session_state.projects):
             proj["capex_rec"] += [0.0]*(proj["years"]-len(proj["capex_rec"]))
         elif len(proj["capex_rec"]) > proj["years"]:
             proj["capex_rec"] = proj["capex_rec"][:proj["years"]]
-
         df_capex = pd.DataFrame({"Anno": range(1, proj["years"]+1), "CAPEX Ricorrente": proj["capex_rec"]})
         df_capex_edit = st.data_editor(df_capex, key=f"capex_rec_{i}", num_rows="dynamic")
         proj["capex_rec"] = df_capex_edit["CAPEX Ricorrente"].tolist()
 
-        # ------------------ Ricavi ------------------
+        # ------------------ Ricavi multipli ------------------
         st.subheader("📈 Ricavi")
-        for key, label in [("price", "Prezzo"), ("quantity", "Quantità")]:
-            dist = st.selectbox(f"Distribuzione {label}", ["Normale","Triangolare","Lognormale","Uniforme"],
-                                index=["Normale","Triangolare","Lognormale","Uniforme"].index(proj["revenues"][key]["dist"]),
-                                key=f"{key}_dist_{i}")
-            proj["revenues"][key]["dist"] = dist
-            proj["revenues"][key]["p1"] = st.number_input(f"{label} - Param 1", value=proj["revenues"][key]["p1"], key=f"{key}_p1_{i}")
-            proj["revenues"][key]["p2"] = st.number_input(f"{label} - Param 2", value=proj["revenues"][key]["p2"], key=f"{key}_p2_{i}")
-            if dist == "Triangolare":
-                proj["revenues"][key]["p3"] = st.number_input(f"{label} - Param 3 (max)",
-                                                              value=proj["revenues"][key].get("p3", proj["revenues"][key]["p1"]+proj["revenues"][key]["p2"]),
-                                                              key=f"{key}_p3_{i}")
+        for j, rev in enumerate(proj["revenues_list"]):
+            st.markdown(f"**{rev['name']}**")
+            for key, label in [("price", "Prezzo"), ("quantity", "Quantità")]:
+                dist = st.selectbox(f"Distribuzione {label}", ["Normale","Triangolare","Lognormale","Uniforme"],
+                                    index=["Normale","Triangolare","Lognormale","Uniforme"].index(rev[key]["dist"]),
+                                    key=f"{key}_dist_{i}_{j}")
+                rev[key]["dist"] = dist
+                rev[key]["p1"] = st.number_input(f"{label} - Param 1", value=rev[key]["p1"], key=f"{key}_p1_{i}_{j}")
+                rev[key]["p2"] = st.number_input(f"{label} - Param 2", value=rev[key]["p2"], key=f"{key}_p2_{i}_{j}")
+                if dist == "Triangolare":
+                    rev[key]["p3"] = st.number_input(f"{label} - Param 3 (max)",
+                                                     value=rev[key].get("p3", rev[key]["p1"]+rev[key]["p2"]),
+                                                     key=f"{key}_p3_{i}_{j}")
+        if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
+            proj["revenues_list"].append({
+                "name": f"Ricavo {len(proj['revenues_list'])+1}",
+                "price": {"dist": "Normale", "p1": 100.0, "p2": 10.0},
+                "quantity": {"dist": "Normale", "p1": 1000.0, "p2": 100.0}
+            })
 
         # ------------------ Costi ------------------
         st.subheader("💸 Costi")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
-        # Costi aggiuntivi stocastici
+        # ------------------ Costi aggiuntivi ------------------
         st.subheader("📉 Costi aggiuntivi")
         proj.setdefault("other_costs", [])
         for j, cost in enumerate(proj["other_costs"]):
@@ -125,7 +135,7 @@ for i, proj in enumerate(st.session_state.projects):
         if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
             proj["other_costs"].append({"name": f"Costo {len(proj['other_costs'])+1}", "dist":"Normale","p1":0.0,"p2":0.0})
 
-        # ------------------ Ammortamento personalizzato ------------------
+        # ------------------ Ammortamento ------------------
         st.subheader("🏗️ Ammortamento (Depreciation)")
         if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
             proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
@@ -244,3 +254,4 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
