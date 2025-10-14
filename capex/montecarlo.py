@@ -1,5 +1,4 @@
 import numpy as np
-from .revenues import sample
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
 
@@ -105,6 +104,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "cvar": cvar,
         "downside_prob": downside_prob
     }
+
 
 
 
