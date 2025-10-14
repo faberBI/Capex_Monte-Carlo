@@ -3,13 +3,33 @@ from .revenues import sample
 from .costs import compute_costs
 
 def run_montecarlo(proj, n_sim, wacc):
+    """
+    Simulazione Monte Carlo per un progetto CAPEX con ricavi multipli, costi stocastici,
+    CAPEX ricorrente e ammortamento personalizzato.
+
+    Args:
+        proj (dict): Parametri del progetto.
+        n_sim (int): Numero di simulazioni Monte Carlo.
+        wacc (float): Tasso di sconto WACC.
+
+    Returns:
+        dict: Risultati della simulazione con NPV, CaR, CVaR, downside probability e flussi medi annuali.
+    """
     npv_list = []
     yearly_cash_flows = np.zeros(proj["years"])
 
+    # CAPEX iniziale
     capex_initial = proj["capex"]
+
+    # Ammortamento personalizzato
     if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
         proj["depreciation"] = [capex_initial / proj["years"]] * proj["years"]
-    capex_rec = proj.get("capex_rec", [0]*proj["years"])
+
+    # CAPEX ricorrente
+    if isinstance(proj.get("capex_rec", 0), (int, float)):
+        capex_rec = [proj.get("capex_rec", 0)] * proj["years"]
+    else:
+        capex_rec = proj.get("capex_rec", [0] * proj["years"])
 
     for _ in range(n_sim):
         cash_flows = []
@@ -34,7 +54,7 @@ def run_montecarlo(proj, n_sim, wacc):
             # --- Costi aggiuntivi stocastici ---
             extra_costs = sum(sample(oc) for oc in proj.get("other_costs", []))
 
-            # --- Ammortamento ---
+            # --- Ammortamento personalizzato ---
             depreciation = proj["depreciation"][t]
 
             # --- EBIT ---
@@ -48,10 +68,13 @@ def run_montecarlo(proj, n_sim, wacc):
             cash_flows.append(fcf)
 
         yearly_cash_flows += np.array(cash_flows) / n_sim
-        discounted = [cf / ((1 + wacc) ** (t+1)) for t, cf in enumerate(cash_flows)]
+
+        # NPV scontato
+        discounted = [cf / ((1 + wacc) ** (t + 1)) for t, cf in enumerate(cash_flows)]
         npv = sum(discounted) - capex_initial
         npv_list.append(npv)
 
+    # --- Indicatori di rischio ---
     npv_array = np.array(npv_list)
     expected_npv = np.mean(npv_array)
     percentile_5 = np.percentile(npv_array, 5)
