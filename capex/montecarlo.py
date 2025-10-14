@@ -2,91 +2,78 @@ import numpy as np
 from .revenues import sample
 from .costs import compute_costs
 
-def run_montecarlo(proj, n_sim, wacc):
+import numpy as np
+from capex.wacc import calculate_wacc
+
+def run_montecarlo(project, n_sim, wacc):
     """
-    Simulazione Monte Carlo per un progetto CAPEX con ricavi multipli, costi stocastici,
-    CAPEX ricorrente e ammortamento personalizzato.
-
-    Args:
-        proj (dict): Parametri del progetto.
-        n_sim (int): Numero di simulazioni Monte Carlo.
-        wacc (float): Tasso di sconto WACC.
-
-    Returns:
-        dict: Risultati della simulazione con NPV, CaR, CVaR, downside probability e flussi medi annuali.
+    Esegue simulazioni Monte Carlo per un progetto con CAPEX ricorrente,
+    ricavi e costi stocastici distribuiti anno per anno.
+    
+    project: dict con dati del progetto
+    n_sim: numero simulazioni
+    wacc: costo medio ponderato del capitale
     """
-    npv_list = []
-    yearly_cash_flows = np.zeros(proj["years"])
+    
+    years = project["years"]
+    npv_array = np.zeros(n_sim)
+    yearly_cashflows_list = []
 
-    # CAPEX iniziale
-    capex_initial = proj["capex"]
+    for sim in range(n_sim):
+        cashflows = []
 
-    # Ammortamento personalizzato
-    if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
-        proj["depreciation"] = [capex_initial / proj["years"]] * proj["years"]
+        for t in range(years):
+            # CAPEX totale (iniziale + ricorrente)
+            capex = 0
+            if t == 0:
+                capex += project["capex"]
+            capex += sample(project["capex_rec"], year_idx=t)
 
-    # CAPEX ricorrente
-    if isinstance(proj.get("capex_rec", 0), (int, float)):
-        capex_rec = [proj.get("capex_rec", 0)] * proj["years"]
-    else:
-        capex_rec = proj.get("capex_rec", [0] * proj["years"])
-
-    for _ in range(n_sim):
-        cash_flows = []
-
-        for t in range(proj["years"]):
-            # --- Ricavi multipli ---
+            # Ricavi
             revenue = 0
-            for rev in proj.get("revenues_list", []):
-                price = sample(rev["price"]) * (1 + proj["price_growth"][t])
-                quantity = sample(rev["quantity"]) * (1 + proj["quantity_growth"][t])
+            for rev in project["revenues_list"]:
+                price = sample(rev["price"], year_idx=t) * (1 + project["price_growth"][t])
+                quantity = sample(rev["quantity"], year_idx=t) * (1 + project["quantity_growth"][t])
                 revenue += price * quantity
 
-            # --- Costi variabili/fissi ---
-            fixed_sample = proj["costs"]["fixed"]
-            total_cost = compute_costs(
-                revenue,
-                proj["costs"]["var_pct"],
-                fixed_sample,
-                proj["fixed_cost_inflation"][t]
-            )
+            # Costi variabili
+            var_cost = revenue * project["costs"]["var_pct"]
 
-            # --- Costi aggiuntivi stocastici ---
-            extra_costs = sum(sample(oc) for oc in proj.get("other_costs", []))
+            # Costi fissi
+            fixed_cost = project["costs"]["fixed"] * (1 + project["fixed_cost_inflation"][t])
 
-            # --- Ammortamento personalizzato ---
-            depreciation = proj["depreciation"][t]
+            # Costi aggiuntivi
+            other_costs = 0
+            for oc in project.get("other_costs", []):
+                other_costs += sample(oc, year_idx=t)
 
-            # --- EBIT ---
-            ebit = revenue - total_cost - extra_costs - depreciation
+            # Ammortamento
+            depreciation = project["depreciation"][t]
 
-            # --- Tasse ---
-            taxes = max(0, ebit) * proj["tax"]
+            # Cashflow netto
+            ebit = revenue - var_cost - fixed_cost - other_costs - depreciation
+            tax = ebit * project["tax"] if ebit > 0 else 0
+            net_cashflow = ebit - tax + depreciation - capex
 
-            # --- Free Cash Flow ---
-            fcf = ebit - taxes + depreciation - capex_rec[t]
-            cash_flows.append(fcf)
+            cashflows.append(net_cashflow)
 
-        yearly_cash_flows += np.array(cash_flows) / n_sim
+        # Calcolo NPV
+        discounted_cf = [cf / ((1 + wacc) ** (t+1)) for t, cf in enumerate(cashflows)]
+        npv = sum(discounted_cf)
+        npv_array[sim] = npv
+        yearly_cashflows_list.append(cashflows)
 
-        # NPV scontato
-        discounted = [cf / ((1 + wacc) ** (t + 1)) for t, cf in enumerate(cash_flows)]
-        npv = sum(discounted) - capex_initial
-        npv_list.append(npv)
-
-    # --- Indicatori di rischio ---
-    npv_array = np.array(npv_list)
     expected_npv = np.mean(npv_array)
-    percentile_5 = np.percentile(npv_array, 5)
-    car = expected_npv - percentile_5
+    car = np.percentile(npv_array, 5)  # 5% worst-case
     downside_prob = np.mean(npv_array < 0)
-    cvar = np.mean(npv_array[npv_array <= percentile_5])
+    cvar = np.mean(npv_array[npv_array <= car]) if np.any(npv_array <= car) else car
 
     return {
         "npv_array": npv_array,
+        "yearly_cash_flows": yearly_cashflows_list,
         "expected_npv": expected_npv,
         "car": car,
         "downside_prob": downside_prob,
-        "cvar": cvar,
-        "yearly_cash_flows": yearly_cash_flows
+        "cvar": cvar
     }
+
