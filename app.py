@@ -159,44 +159,50 @@ for i, proj in enumerate(st.session_state.projects):
         proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
         # ------------------ Costi aggiuntivi con name ------------------
+                # ------------------ Costi aggiuntivi ------------------
         st.subheader("📉 Costi aggiuntivi")
         proj.setdefault("other_costs", [])
         
         for j, cost in enumerate(proj["other_costs"]):
-            st.markdown(f"**{cost.get('name', f'COSTO {j+1}')}**")
+            st.markdown(f"**{cost['name']}**")
             
             # Loop anni
             for year_idx in range(proj["years"]):
                 st.markdown(f"Anno {year_idx+1}")
-                
+                # Dizionario anno
+                year_cost = cost["values"][year_idx]
+        
                 # Dropdown distribuzione
                 dist_options = ["Normale", "Triangolare", "Lognormale", "Uniforme"]
                 selected_dist = st.selectbox(
                     f"Distribuzione anno {year_idx+1} - {cost['name']}",
                     options=dist_options,
-                    index=dist_options.index(cost[year_idx].get("dist", "Normale")),
+                    index=dist_options.index(year_cost.get("dist", "Normale")),
                     key=f"oc_dist_{i}_{j}_{year_idx}"
                 )
-                cost[year_idx]["dist"] = selected_dist
-                
+                year_cost["dist"] = selected_dist
+            
                 # Parametri dinamici
                 if selected_dist == "Normale":
-                    cost[year_idx]["p1"] = st.number_input(f"Media (p1) anno {year_idx+1}", value=cost[year_idx].get("p1",0.0), key=f"oc_n_p1_{i}_{j}_{year_idx}")
-                    cost[year_idx]["p2"] = st.number_input(f"Std Dev (p2) anno {year_idx+1}", value=cost[year_idx].get("p2",0.0), key=f"oc_n_p2_{i}_{j}_{year_idx}")
+                    year_cost["p1"] = st.number_input(f"Media (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_n_p1_{i}_{j}_{year_idx}")
+                    year_cost["p2"] = st.number_input(f"Std Dev (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_n_p2_{i}_{j}_{year_idx}")
                 elif selected_dist == "Triangolare":
-                    cost[year_idx]["p1"] = st.number_input(f"Minimo (p1) anno {year_idx+1}", value=cost[year_idx].get("p1",0.0), key=f"oc_t_p1_{i}_{j}_{year_idx}")
-                    cost[year_idx]["p2"] = st.number_input(f"Modalità (p2) anno {year_idx+1}", value=cost[year_idx].get("p2",0.0), key=f"oc_t_p2_{i}_{j}_{year_idx}")
-                    cost[year_idx]["p3"] = st.number_input(f"Massimo (p3) anno {year_idx+1}", value=cost[year_idx].get("p3",0.0), key=f"oc_t_p3_{i}_{j}_{year_idx}")
+                    year_cost["p1"] = st.number_input(f"Minimo (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_t_p1_{i}_{j}_{year_idx}")
+                    year_cost["p2"] = st.number_input(f"Modalità (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_t_p2_{i}_{j}_{year_idx}")
+                    year_cost["p3"] = st.number_input(f"Massimo (p3) anno {year_idx+1}", value=year_cost.get("p3",0.0), key=f"oc_t_p3_{i}_{j}_{year_idx}")
                 elif selected_dist == "Lognormale":
-                    cost[year_idx]["p1"] = st.number_input(f"Mu (p1) anno {year_idx+1}", value=cost[year_idx].get("p1",0.0), key=f"oc_l_p1_{i}_{j}_{year_idx}")
-                    cost[year_idx]["p2"] = st.number_input(f"Sigma (p2) anno {year_idx+1}", value=cost[year_idx].get("p2",0.0), key=f"oc_l_p2_{i}_{j}_{year_idx}")
+                    year_cost["p1"] = st.number_input(f"Mu (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_l_p1_{i}_{j}_{year_idx}")
+                    year_cost["p2"] = st.number_input(f"Sigma (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_l_p2_{i}_{j}_{year_idx}")
                 elif selected_dist == "Uniforme":
-                    cost[year_idx]["p1"] = st.number_input(f"Min (p1) anno {year_idx+1}", value=cost[year_idx].get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{year_idx}")
-                    cost[year_idx]["p2"] = st.number_input(f"Max (p2) anno {year_idx+1}", value=cost[year_idx].get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{year_idx}")
+                    year_cost["p1"] = st.number_input(f"Min (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{year_idx}")
+                    year_cost["p2"] = st.number_input(f"Max (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{year_idx}")
             
         # Pulsante per aggiungere nuovo costo stocastico
         if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
-            proj["other_costs"].append([{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])])
+            proj["other_costs"].append({
+                "name": f"Costo {len(proj['other_costs'])+1}",
+                "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
+            })
 
         # ------------------ Ammortamento ------------------
         st.subheader("🏗️ Ammortamento (Depreciation)")
@@ -317,6 +323,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
