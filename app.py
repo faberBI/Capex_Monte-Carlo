@@ -154,7 +154,26 @@ for i, proj in enumerate(st.session_state.projects):
                 "p1": 0.0,
                 "p2": 0.0
             })
-
+                st.subheader("🏗️ Ammortamento (Depreciation) personalizzato")
+        
+        # Riallinea la lista degli ammortamenti alla lunghezza degli anni
+        if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
+            # default lineare se non definito
+            proj["depreciation"] = [proj["capex"]/proj["years"]] * proj["years"]
+        
+        df_depreciation = pd.DataFrame({
+            "Anno": list(range(1, proj["years"]+1)),
+            "Ammortamento": proj["depreciation"]
+        })
+        
+        df_depreciation_edit = st.data_editor(
+            df_depreciation,
+            key=f"depreciation_{i}",
+            num_rows="dynamic"
+        )
+        
+        proj["depreciation"] = df_depreciation_edit["Ammortamento"].tolist()
+        
         # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0]*proj["years"])
@@ -304,6 +323,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
