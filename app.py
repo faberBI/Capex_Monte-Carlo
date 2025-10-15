@@ -12,7 +12,8 @@ from capex.visuals import (
     plot_boxplot,
     plot_cashflows,
     plot_risk_return_matrix,
-    plot_car_kri
+    plot_car_kri,
+    plot_discounted_pbp
 )
 
 api_key = st.secrets["OPENAI_API_KEY"]
@@ -260,6 +261,10 @@ if st.button("▶️ Avvia simulazioni"):
         st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
         st.plotly_chart(plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]), use_container_width=True)
+        st.write(f"**PBP attualizzato medio:** {sim_result['discounted_pbp']:.2f} anni")
+        
+        # Grafico distribuzione PBP (serve avere pbp_array nell'output di run_montecarlo)
+        st.pyplot(plot_discounted_pbp(sim_result['pbp_array'], proj['name']))
 
         car_pct = sim_result["car"] / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
         kri_text = "🔴 Rischio Alto" if car_pct > 0.5 else ("🟡 Rischio Medio" if car_pct > 0.25 else "🟢 Rischio Basso")
@@ -339,6 +344,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
