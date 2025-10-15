@@ -133,37 +133,35 @@ def plot_car_kri(car_value, expected_npv, project_name):
 
     return fig
 
-def plot_discounted_pbp(npv_cum_matrix, proj_name):
+def plot_cumulative_npv(npv_cum_matrix, proj_name):
     """
-    Grafico NPV cumulato per anno:
-    - Mediana
-    - Percentile 5%-95%
-    - Evidenzia anno in cui mediana diventa positiva (Payback Period)
+    Grafico NPV cumulato per anno (mediana + 5° e 95° percentile).
+    
+    Args:
+        npv_cum_matrix (np.array): shape (n_sim, years)
+        proj_name (str): nome progetto
     """
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    median_npv = np.median(npv_cum_matrix, axis=0)
+    median = np.median(npv_cum_matrix, axis=0)
     p5 = np.percentile(npv_cum_matrix, 5, axis=0)
     p95 = np.percentile(npv_cum_matrix, 95, axis=0)
     years = np.arange(1, npv_cum_matrix.shape[1]+1)
 
-    fig, ax = plt.subplots(figsize=(10,5))
-    ax.plot(years, median_npv, color='blue', label='Mediana NPV', linewidth=2)
-    ax.fill_between(years, p5, p95, color='skyblue', alpha=0.4, label='5%-95% intervallo')
-
-    # Evidenzia primo anno in cui mediana > 0
+    fig, ax = plt.subplots(figsize=(10,6))
+    ax.plot(years, median, label="Mediana NPV", color="blue", lw=2)
+    ax.fill_between(years, p5, p95, color="blue", alpha=0.2, label="5°-95° percentile")
+    
+    # Evidenzia l'anno in cui la mediana diventa positiva
     try:
-        pbp_year = np.argmax(median_npv > 0) + 1
-        ax.axvline(pbp_year, color='red', linestyle='--', label=f'PBP mediano: anno {pbp_year}')
+        pbp_median = np.argmax(median > 0) + 1
+        ax.axvline(pbp_median, color="green", ls="--", lw=2, label=f"NPV positivo anno {pbp_median}")
     except:
-        pbp_year = None
+        pbp_median = None
 
-    ax.set_title(f"📈 Evoluzione NPV cumulato - {proj_name}")
+    ax.set_title(f"📈 NPV cumulato per anno - {proj_name}")
     ax.set_xlabel("Anno")
     ax.set_ylabel("NPV cumulato")
+    ax.grid(alpha=0.3)
     ax.legend()
-    ax.grid(True, alpha=0.3)
     return fig
 
 
