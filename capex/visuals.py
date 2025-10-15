@@ -169,19 +169,19 @@ def plot_probs_kri(downside_prob, project_name):
     Gauge professionale: KRI basato sulla probabilità di NPV < 0.
     
     Soglie:
-    - Verde: <3%
-    - Giallo: <6%
-    - Rosso: >=6%
+    - Verde: <5%
+    - Giallo: <7%
+    - Rosso: >7%
     """
     # Definizione soglie
-    soglia_verde = 0.03
-    soglia_gialla = 0.06
+    soglia_verde = 0.05
+    soglia_gialla = 0.07
 
     # Determina livello di rischio e colore
-    if downside_prob < soglia_verde:
+    if downside_prob <=soglia_verde:
         risk_level = "Basso"
         color = "#22c55e"  # verde
-    elif downside_prob < soglia_gialla:
+    elif downside_prob <= soglia_gialla:
         risk_level = "Medio"
         color = "#facc15"  # giallo
     else:
@@ -219,6 +219,7 @@ def plot_probs_kri(downside_prob, project_name):
     )
 
     return fig
+
 
 
 
