@@ -39,26 +39,14 @@ def sample(dist_obj, year_idx=None):
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 def run_montecarlo(proj, n_sim, wacc):
-    """
-    Esegue la simulazione Monte Carlo per un progetto.
-    Calcola anche il Payback Period attualizzato (Discounted PBP).
-
-    Args:
-        proj (dict): progetto con ricavi, costi, CAPEX ricorrente, ecc.
-        n_sim (int): numero di simulazioni
-        wacc (float): WACC del progetto
-
-    Returns:
-        dict: risultati simulazione contenente npv_array, yearly_cash_flows, car, cvar, downside_prob, discounted_pbp
-    """
     years = proj["years"]
     npv_array = np.zeros(n_sim)
     yearly_cash_flows = np.zeros((n_sim, years))
-    pbp_array = np.zeros(n_sim)  # Payback period per simulazione
+    pbp_array = np.zeros(n_sim)  # <-- array PBP simulazioni
 
     for sim in range(n_sim):
         cash_flows = []
-        discounted_cf_cum = 0  # somma cumulata CF scontati
+        discounted_cf_cum = 0
         pbp_found = False
 
         for year in range(years):
@@ -66,50 +54,42 @@ def run_montecarlo(proj, n_sim, wacc):
             capex_rec = proj.get("capex_rec", [0]*years)[year]
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
 
-            # Ricavi stocastici
             total_revenue = sum(sample(rev["price"], year) * sample(rev["quantity"], year) 
                                 for rev in proj["revenues_list"])
-
-            # Costi
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
             depreciation = proj.get("depreciation", [0]*years)[year]
 
-            # Cash flow operativo
             cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
             cash_flows.append(cf)
 
-            # CF scontato cumulativo per PBP
+            # PBP attualizzato
             discounted_cf_cum += cf / ((1 + wacc) ** (year + 1))
             if not pbp_found and discounted_cf_cum >= 0:
-                pbp_array[sim] = year + 1  # PBP in anni
+                pbp_array[sim] = year + 1
                 pbp_found = True
 
         if not pbp_found:
-            pbp_array[sim] = np.nan  # Non recuperato entro l'orizzonte
+            pbp_array[sim] = np.nan
 
-        # Sconto CF per NPV
         discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
         npv_array[sim] = sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
-    expected_npv = np.mean(npv_array)
-    car = np.percentile(npv_array, 5)
-    cvar = np.mean(npv_array[npv_array <= car]) if np.any(npv_array <= car) else car
-    downside_prob = np.mean(npv_array < 0)
     avg_discounted_pbp = np.nanmean(pbp_array)
 
+    # --- QUI DEVE ESSERE RESTITUITO TUTTO ---
     return {
         "npv_array": npv_array,
         "yearly_cash_flows": yearly_cash_flows.mean(axis=0),
-        "expected_npv": expected_npv,
-        "car": car,
-        "cvar": cvar,
-        "downside_prob": downside_prob,
-        "discounted_pbp": avg_discounted_pbp,  # <-- aggiunto
-        "pbp_array": pbp_array               # <-- aggiunto
-        }
-
+        "expected_npv": np.mean(npv_array),
+        "car": np.percentile(npv_array, 5),
+        "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)]) 
+                if np.any(npv_array <= np.percentile(npv_array, 5)) else np.percentile(npv_array, 5),
+        "downside_prob": np.mean(npv_array < 0),
+        "discounted_pbp": avg_discounted_pbp,  # <-- deve esserci
+        "pbp_array": pbp_array               # <-- opzionale ma necessario per grafico
+    }
 
 
 
