@@ -13,7 +13,8 @@ from capex.visuals import (
     plot_cashflows,
     plot_risk_return_matrix,
     plot_car_kri,
-    plot_cumulative_npv
+    plot_cumulative_npv,
+    plot_probs_kri
 )
 
 api_key = st.secrets["OPENAI_API_KEY"]
@@ -319,6 +320,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
