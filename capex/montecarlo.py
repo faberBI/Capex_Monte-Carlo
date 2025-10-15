@@ -59,31 +59,29 @@ def run_montecarlo(proj, n_sim, wacc):
         for year in range(years):
             # CAPEX iniziale solo al primo anno
             capex_init = proj["capex"] if year == 0 else 0
-            # CAPEX ricorrente
-            capex_rec = sample(proj.get("capex_rec", None), year) if proj.get("capex_rec") else 0
+            # CAPEX ricorrente fisso
+            capex_rec = proj.get("capex_rec", [0]*years)[year]
+            # Costi fissi anno per anno
+            fixed_cost = proj.get("fixed_costs", [0]*years)[year]
 
-            # Ricavi totali per anno
+            # Ricavi totali (stocastici)
             total_revenue = 0
             for rev in proj["revenues_list"]:
                 price = sample(rev["price"], year)
                 quantity = sample(rev["quantity"], year)
                 total_revenue += price * quantity
 
-            # Costi variabili e fissi
+            # Costi variabili
             var_cost = total_revenue * proj["costs"]["var_pct"]
-            fixed_cost = proj["costs"]["fixed"] * (1 + proj.get("fixed_cost_inflation", [0]*years)[year])
 
-            # Costi aggiuntivi anno per anno
-            other_costs_total = 0
-            for cost in proj.get("other_costs", []):
-                other_costs_total += sample(cost.get("values", None), year)
+            # Costi aggiuntivi stocastici
+            other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
 
             # Ammortamento
             depreciation = proj.get("depreciation", [0]*years)[year]
 
             # Cash flow operativo
             cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
-            cf -= depreciation * 0  # se vuoi considerare ammortamento fiscale, puoi moltiplicare per (1-tax)
             cash_flows.append(cf)
 
         # Sconto CF al presente
@@ -98,12 +96,14 @@ def run_montecarlo(proj, n_sim, wacc):
 
     return {
         "npv_array": npv_array,
-        "yearly_cash_flows": yearly_cash_flows.mean(axis=0),  # cash flow medio per anno
+        "yearly_cash_flows": yearly_cash_flows.mean(axis=0),
         "expected_npv": expected_npv,
         "car": car,
         "cvar": cvar,
         "downside_prob": downside_prob
     }
+
+
 
 
 
