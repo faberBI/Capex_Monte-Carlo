@@ -133,23 +133,49 @@ def plot_car_kri(car_value, expected_npv, project_name):
 
     return fig
 
-def plot_discounted_pbp(pbp_array, proj_name):
+def plot_discounted_pbp(npv_matrix, proj_name):
     """
-    Grafico istogramma del Payback Period attualizzato per le simulazioni Monte Carlo.
-
+    Grafico evoluzione NPV cumulato per simulazioni Monte Carlo.
+    
     Args:
-        pbp_array (np.array): array PBP per simulazione
+        npv_matrix (np.array): array 2D simulazioni x anni dei cashflow scontati cumulati
         proj_name (str): nome progetto
     """
-    fig, ax = plt.subplots(figsize=(8,5))
-    ax.hist(pbp_array[~np.isnan(pbp_array)], 
-            bins=range(1, int(np.nanmax(pbp_array))+2), 
-            color='skyblue', edgecolor='black', alpha=0.7)
-    ax.set_title(f"📊 Distribuzione Payback Period attualizzato - {proj_name}")
-    ax.set_xlabel("Payback Period (anni)")
-    ax.set_ylabel("Frequenza")
-    ax.grid(axis='y', alpha=0.3)
+    npv_matrix = np.array(npv_matrix)  # shape: (n_sim, years)
+    years = npv_matrix.shape[1]
+
+    # Cumulative NPV medio e percentili
+    median_cum = np.median(npv_matrix, axis=0)
+    perc5 = np.percentile(npv_matrix, 5, axis=0)
+    perc95 = np.percentile(npv_matrix, 95, axis=0)
+
+    fig, ax = plt.subplots(figsize=(10,6))
+
+    # Plotto tutte le simulazioni trasparenti
+    for sim in npv_matrix:
+        ax.plot(range(1, years+1), sim, color="skyblue", alpha=0.1)
+
+    # Area percentili 5%-95%
+    ax.fill_between(range(1, years+1), perc5, perc95, color="#93c5fd", alpha=0.3, label="5%-95% intervallo")
+
+    # Linea mediana
+    ax.plot(range(1, years+1), median_cum, color="blue", linewidth=2.5, label="NPV mediano cumulato")
+
+    # Evidenzio quando il NPV mediano diventa positivo
+    pbp_idx = np.argmax(median_cum > 0)  # primo anno >0
+    if median_cum[pbp_idx] > 0:
+        ax.axvline(pbp_idx+1, color="red", linestyle="--", label=f"PBP medio anno {pbp_idx+1}")
+        ax.scatter(pbp_idx+1, median_cum[pbp_idx], color="red", s=80, zorder=5)
+
+    ax.set_title(f"📈 Evoluzione NPV cumulato - {proj_name}")
+    ax.set_xlabel("Anno")
+    ax.set_ylabel("NPV cumulato")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
     return fig
+
+
 
 
 
