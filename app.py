@@ -87,7 +87,7 @@ def add_project():
     })
 
 # ------------------ UI ------------------
-st.title("📊 CAPEX Risk Framework con WACC, CAPEX Ricorrente e Costi Stocastici")
+st.title("📊 CAPEX @Risk Framework by ERM")
 st.button("➕ Aggiungi progetto", on_click=add_project)
 n_sim = st.slider("Numero simulazioni Monte Carlo", 1000, 1_000_000, 10_000)
 
@@ -337,6 +337,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
