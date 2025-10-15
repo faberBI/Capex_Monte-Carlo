@@ -217,20 +217,29 @@ if st.button("▶️ Avvia simulazioni"):
         st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
         st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
 
+        # ------------------ Grafici classici ------------------
         st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
                                         np.percentile(sim_result["npv_array"], 5), proj["name"]))
         st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
         st.plotly_chart(plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]), use_container_width=True)
+
+        # ------------------ KRI corretto ------------------
         kri_pct = (sim_result["expected_npv"] - sim_result["car"]) / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
         kri_text = "🔴 Rischio Alto" if kri_pct > 0.5 else ("🟡 Rischio Medio" if kri_pct > 0.25 else "🟢 Rischio Basso")
         st.markdown(f"**KRI sintetico:** {kri_text} ({kri_pct*100:.1f}% del valore atteso)")
-        
-        st.write(f"**PBP attualizzato medio:** {sim_result['discounted_pbp']:.2f} anni")
-        
-        # Grafico distribuzione PBP (serve avere pbp_array nell'output di run_montecarlo)
-        st.pyplot(plot_discounted_pbp(sim_result['pbp_array'], proj['name']))
 
+        # ------------------ NPV cumulato e Payback ------------------
+        npv_cum_matrix = np.cumsum(sim_result['yearly_cash_flows'], axis=1)  # cumulativo anno per anno
+        sim_result['npv_cum_matrix'] = npv_cum_matrix
+
+        # PBP mediana (anno in cui NPV mediano diventa positivo)
+        median_cum_npv = np.median(npv_cum_matrix, axis=0)
+        pbp_median = np.argmax(median_cum_npv > 0) + 1  # +1 perché gli anni partono da 1
+        st.write(f"**PBP attualizzato medio (mediana NPV):** {pbp_median} anni")
+
+        # Grafico NPV cumulato a serie storica
+        st.pyplot(plot_discounted_pbp(npv_cum_matrix, proj['name']))
 
     st.session_state.results = results
 
@@ -306,6 +315,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
