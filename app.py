@@ -202,45 +202,6 @@ def sample(dist_obj, year_idx=None):
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
-def run_montecarlo(proj, n_sim, wacc):
-    years = proj["years"]
-    npv_array = np.zeros(n_sim)
-    yearly_cash_flows = np.zeros((n_sim, years))
-
-    for sim in range(n_sim):
-        cash_flows = []
-        for year in range(years):
-            capex_init = proj["capex"] if year == 0 else 0
-            capex_rec = proj.get("capex_rec", [0]*years)[year]
-            total_revenue = 0
-            for rev in proj["revenues_list"]:
-                price = sample(rev["price"], year)
-                quantity = sample(rev["quantity"], year)
-                total_revenue += price * quantity
-            var_cost = total_revenue * proj["costs"]["var_pct"]
-            fixed_cost = proj.get("fixed_costs", [0]*years)[year]
-            other_costs_total = sum(sample(cost["values"], year) for cost in proj.get("other_costs", []))
-            depreciation = proj.get("depreciation", [0]*years)[year]
-            cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
-            cash_flows.append(cf)
-        discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
-        npv_array[sim] = sum(discounted_cf)
-        yearly_cash_flows[sim, :] = cash_flows
-
-    expected_npv = np.mean(npv_array)
-    car = np.percentile(npv_array, 5)
-    cvar = np.mean(npv_array[npv_array <= car]) if np.any(npv_array <= car) else car
-    downside_prob = np.mean(npv_array < 0)
-
-    return {
-        "npv_array": npv_array,
-        "yearly_cash_flows": yearly_cash_flows.mean(axis=0),
-        "expected_npv": expected_npv,
-        "car": car,
-        "cvar": cvar,
-        "downside_prob": downside_prob
-    }
-
 # ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
     results = []
@@ -344,6 +305,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
