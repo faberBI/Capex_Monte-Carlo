@@ -106,8 +106,10 @@ def run_montecarlo(proj, n_sim, wacc):
         "car": car,
         "cvar": cvar,
         "downside_prob": downside_prob,
-        "discounted_pbp": avg_discounted_pbp
-    }
+        "discounted_pbp": avg_discounted_pbp,  # <-- aggiunto
+        "pbp_array": pbp_array               # <-- aggiunto
+        }
+
 
 
 
