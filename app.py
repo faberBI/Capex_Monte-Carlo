@@ -17,42 +17,6 @@ from capex.visuals import (
 
 api_key = st.secrets["OPENAI_API_KEY"]
 
-# ------------------ Helper per sample distribuzioni ------------------
-def sample(dist_obj, year_idx=None):
-    """
-    Campiona un valore da una distribuzione.
-    
-    dist_obj può essere:
-    - un dizionario singolo: {"dist": "Normale", "p1": ..., "p2": ..., "p3": ...}
-    - una lista di dizionari per anno, in tal caso serve year_idx
-    
-    year_idx: indice dell'anno (0-based) se dist_obj è lista
-    """
-    # Se è una lista di distribuzioni per anno, seleziona quella giusta
-    if isinstance(dist_obj, list):
-        if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
-        dist_obj = dist_obj[year_idx]
-
-    # Parametri della distribuzione
-    dist_type = dist_obj.get("dist", "Normale")
-    p1 = dist_obj.get("p1", 0.0)
-    p2 = dist_obj.get("p2", 0.0)
-    p3 = dist_obj.get("p3", p1 + p2)  # solo per triangolare
-
-    # Campionamento
-    if dist_type == "Normale":
-        return np.random.normal(p1, p2)
-    elif dist_type == "Triangolare":
-        return np.random.triangular(p1, p2, p3)
-    elif dist_type == "Lognormale":
-        return np.random.lognormal(p1, p2)
-    elif dist_type == "Uniforme":
-        return np.random.uniform(p1, p2)
-    else:
-        raise ValueError(f"Distribuzione non supportata: {dist_type}")
-
-
 # ------------------ Session state ------------------
 if "projects" not in st.session_state:
     st.session_state.projects = []
@@ -70,7 +34,8 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
-        "capex_rec": None,
+        "capex_rec": None,  # ora fissi anno per anno
+        "fixed_costs": None,  # ora fissi anno per anno
         "revenues_list": [
             {
                 "name": "Ricavo 1",
@@ -78,11 +43,10 @@ def add_project():
                 "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(10)]
             }
         ],
-        "costs": {"var_pct": 0.08, "fixed": -50.0},
+        "costs": {"var_pct": 0.08},
         "other_costs": [],
         "price_growth": [0.01]*10,
         "quantity_growth": [0.05]*10,
-        "fixed_cost_inflation": [0.02]*10,
         "depreciation": [20.0]*10
     })
 
@@ -104,34 +68,15 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # ------------------ CAPEX Ricorrente con pulsante e distribuzione ------------------
-        st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
-        if proj["capex_rec"] is None:
+        # ------------------ CAPEX Ricorrente (fisso anno per anno) ------------------
+        st.subheader("🏗️ CAPEX Ricorrente (anno per anno, valori fissi)")
+        if proj.get("capex_rec") is None:
             if st.button(f"➕ Aggiungi CAPEX Ricorrente", key=f"add_capex_rec_{i}"):
-                proj["capex_rec"] = [{"dist":"Normale","p1":0.0,"p2":0.0,"p3":0.0} for _ in range(proj["years"])]
-        if proj["capex_rec"] is not None:
+                proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
+
+        if proj.get("capex_rec") is not None:
             for y in range(proj["years"]):
-                st.markdown(f"**Anno {y+1}**")
-                dist_type = st.selectbox(
-                    "Distribuzione",
-                    ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                    index=["Normale","Triangolare","Lognormale","Uniforme"].index(proj["capex_rec"][y]["dist"]),
-                    key=f"capex_dist_{i}_{y}"
-                )
-                proj["capex_rec"][y]["dist"] = dist_type
-                if dist_type == "Normale":
-                    proj["capex_rec"][y]["p1"] = st.number_input("Media (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
-                    proj["capex_rec"][y]["p2"] = st.number_input("Deviazione standard (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
-                elif dist_type == "Triangolare":
-                    proj["capex_rec"][y]["p1"] = st.number_input("Minimo (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
-                    proj["capex_rec"][y]["p2"] = st.number_input("Modal (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
-                    proj["capex_rec"][y]["p3"] = st.number_input("Massimo (p3)", value=proj["capex_rec"][y].get("p3",0.0), key=f"capex_p3_{i}_{y}")
-                elif dist_type == "Lognormale":
-                    proj["capex_rec"][y]["p1"] = st.number_input("Media log (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
-                    proj["capex_rec"][y]["p2"] = st.number_input("Deviazione log (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
-                elif dist_type == "Uniforme":
-                    proj["capex_rec"][y]["p1"] = st.number_input("Minimo (p1)", value=proj["capex_rec"][y].get("p1",0.0), key=f"capex_p1_{i}_{y}")
-                    proj["capex_rec"][y]["p2"] = st.number_input("Massimo (p2)", value=proj["capex_rec"][y].get("p2",0.0), key=f"capex_p2_{i}_{y}")
+                proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
         # ------------------ Ricavi multipli con distribuzione ------------------
         st.subheader("📈 Ricavi")
@@ -163,30 +108,29 @@ for i, proj in enumerate(st.session_state.projects):
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
                 "name": f"Ricavo {len(proj['revenues_list'])+1}",
-                "price": [{"dist":"Normale","p1":100.0,"p2":10.0,"p3":0.0} for _ in range(proj["years"])],
-                "quantity": [{"dist":"Normale","p1":1000.0,"p2":100.0,"p3":0.0} for _ in range(proj["years"])]
+                "price": [{"dist":"Normale","p1":100.0,"p2":10.0} for _ in range(proj["years"])],
+                "quantity": [{"dist":"Normale","p1":1000.0,"p2":100.0} for _ in range(proj["years"])]
             })
 
-        # ------------------ Costi ------------------
-        st.subheader("💸 Costi")
+        # ------------------ Costi Variabili ------------------
+        st.subheader("💸 Costi Variabili")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
-        proj["costs"]["fixed"] = st.number_input("Costi Fissi annui", value=proj["costs"]["fixed"], step=1.0, key=f"fixed_{i}")
 
-        # ------------------ Costi aggiuntivi con name ------------------
-                # ------------------ Costi aggiuntivi ------------------
+        # ------------------ Costi Fissi anno per anno ------------------
+        st.subheader("💸 Costi Fissi annui")
+        if proj.get("fixed_costs") is None or len(proj["fixed_costs"]) != proj["years"]:
+            proj["fixed_costs"] = [0.0]*proj["years"]
+        for y in range(proj["years"]):
+            proj["fixed_costs"][y] = st.number_input(f"Costi fissi anno {y+1}", value=proj["fixed_costs"][y], key=f"fixed_{i}_{y}")
+
+        # ------------------ Costi aggiuntivi stocastici ------------------
         st.subheader("📉 Costi aggiuntivi")
         proj.setdefault("other_costs", [])
-        
         for j, cost in enumerate(proj["other_costs"]):
             st.markdown(f"**{cost['name']}**")
-            
-            # Loop anni
             for year_idx in range(proj["years"]):
                 st.markdown(f"Anno {year_idx+1}")
-                # Dizionario anno
                 year_cost = cost["values"][year_idx]
-        
-                # Dropdown distribuzione
                 dist_options = ["Normale", "Triangolare", "Lognormale", "Uniforme"]
                 selected_dist = st.selectbox(
                     f"Distribuzione anno {year_idx+1} - {cost['name']}",
@@ -195,8 +139,6 @@ for i, proj in enumerate(st.session_state.projects):
                     key=f"oc_dist_{i}_{j}_{year_idx}"
                 )
                 year_cost["dist"] = selected_dist
-            
-                # Parametri dinamici
                 if selected_dist == "Normale":
                     year_cost["p1"] = st.number_input(f"Media (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_n_p1_{i}_{j}_{year_idx}")
                     year_cost["p2"] = st.number_input(f"Std Dev (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_n_p2_{i}_{j}_{year_idx}")
@@ -210,8 +152,6 @@ for i, proj in enumerate(st.session_state.projects):
                 elif selected_dist == "Uniforme":
                     year_cost["p1"] = st.number_input(f"Min (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{year_idx}")
                     year_cost["p2"] = st.number_input(f"Max (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{year_idx}")
-            
-        # Pulsante per aggiungere nuovo costo stocastico
         if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
             proj["other_costs"].append({
                 "name": f"Costo {len(proj['other_costs'])+1}",
@@ -230,15 +170,75 @@ for i, proj in enumerate(st.session_state.projects):
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0]*proj["years"])
         proj.setdefault("quantity_growth", [0.0]*proj["years"])
-        proj.setdefault("fixed_cost_inflation", [0.0]*proj["years"])
         for t in range(proj["years"]):
             proj["price_growth"][t] = st.slider(f"Crescita prezzo anno {t+1} (%)", -0.5, 0.5, proj["price_growth"][t], 0.05, key=f"pg_{i}_{t}")
             proj["quantity_growth"][t] = st.slider(f"Crescita quantità anno {t+1} (%)", -0.5, 0.5, proj["quantity_growth"][t], 0.05, key=f"qg_{i}_{t}")
-            proj["fixed_cost_inflation"][t] = st.slider(f"Crescita costi fissi anno {t+1} (%)", -0.5, 0.5, proj["fixed_cost_inflation"][t], 0.05, key=f"fi_{i}_{t}")
 
         # WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
+
+# ------------------ Funzione Monte Carlo aggiornata ------------------
+def sample(dist_obj, year_idx=None):
+    """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
+    # Se è una lista, seleziona anno
+    if isinstance(dist_obj, list):
+        if year_idx is None:
+            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
+        dist_obj = dist_obj[year_idx]
+    dist_type = dist_obj.get("dist", "Normale")
+    p1 = dist_obj.get("p1", 0.0)
+    p2 = dist_obj.get("p2", 0.0)
+    p3 = dist_obj.get("p3", p1+p2)
+    if dist_type == "Normale":
+        return np.random.normal(p1, p2)
+    elif dist_type == "Triangolare":
+        return np.random.triangular(p1, p2, p3)
+    elif dist_type == "Lognormale":
+        return np.random.lognormal(p1, p2)
+    elif dist_type == "Uniforme":
+        return np.random.uniform(p1, p2)
+    else:
+        raise ValueError(f"Distribuzione non supportata: {dist_type}")
+
+def run_montecarlo(proj, n_sim, wacc):
+    years = proj["years"]
+    npv_array = np.zeros(n_sim)
+    yearly_cash_flows = np.zeros((n_sim, years))
+
+    for sim in range(n_sim):
+        cash_flows = []
+        for year in range(years):
+            capex_init = proj["capex"] if year == 0 else 0
+            capex_rec = proj.get("capex_rec", [0]*years)[year]
+            total_revenue = 0
+            for rev in proj["revenues_list"]:
+                price = sample(rev["price"], year)
+                quantity = sample(rev["quantity"], year)
+                total_revenue += price * quantity
+            var_cost = total_revenue * proj["costs"]["var_pct"]
+            fixed_cost = proj.get("fixed_costs", [0]*years)[year]
+            other_costs_total = sum(sample(cost["values"], year) for cost in proj.get("other_costs", []))
+            depreciation = proj.get("depreciation", [0]*years)[year]
+            cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
+            cash_flows.append(cf)
+        discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
+        npv_array[sim] = sum(discounted_cf)
+        yearly_cash_flows[sim, :] = cash_flows
+
+    expected_npv = np.mean(npv_array)
+    car = np.percentile(npv_array, 5)
+    cvar = np.mean(npv_array[npv_array <= car]) if np.any(npv_array <= car) else car
+    downside_prob = np.mean(npv_array < 0)
+
+    return {
+        "npv_array": npv_array,
+        "yearly_cash_flows": yearly_cash_flows.mean(axis=0),
+        "expected_npv": expected_npv,
+        "car": car,
+        "cvar": cvar,
+        "downside_prob": downside_prob
+    }
 
 # ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
@@ -267,80 +267,9 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-# ------------------ Matrice rischio-rendimento e GPT ------------------
+# ------------------ Matrice rischio-rendimento ------------------
 if st.session_state.results:
     results = st.session_state.results
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
-
-    # OpenAI GPT
-    client = OpenAI(api_key=api_key)
-    summary_df = pd.DataFrame([
-        {
-            "name": r["name"],
-            "expected_npv": r["expected_npv"],
-            "car": r["car"],
-            "downside_prob": r["downside_prob"],
-            "cvar": r["cvar"],
-            "avg_yearly_cashflow": np.mean(r["yearly_cash_flows"])
-        }
-        for r in results
-    ])
-
-    prompt = f"""
-Ecco i risultati sintetici dei progetti (Monte Carlo CAPEX Risk):
-
-{summary_df.to_string(index=False)}
-
-Fornisci un commento sintetico e professionale, evidenziando:
-- Miglior trade-off rischio/rendimento.
-- Robustezza dei NPV stimati.
-- Eventuali rischi particolari emersi dalle simulazioni.
-"""
-
-    if st.button("💬 Genera commento GPT"):
-        for _ in range(3):
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                st.subheader("📑 Commento di GPT")
-                st.write(response.choices[0].message.content)
-                break
-            except OpenAIError:
-                st.warning("Errore OpenAI (es. rate limit), riprovo tra 5 secondi...")
-                time.sleep(5)
-
-# ------------------ Export risultati ------------------
-if st.session_state.results:
-    results = st.session_state.results
-    st.subheader("💾 Esporta risultati")
-    
-    df_summary = pd.DataFrame([{k:v for k,v in r.items() if k!="npv_array"} for r in results])
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_summary.to_excel(writer, index=False, sheet_name='Risultati')
-        for r in results:
-            npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
-            sheet_name = r["name"][:31]
-            npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
-    excel_data = output.getvalue()
-    
-    st.download_button(
-        label="📥 Scarica risultati in Excel",
-        data=excel_data,
-        file_name="capex_risultati.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-
-
-
-
 
