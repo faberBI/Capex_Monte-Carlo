@@ -141,14 +141,16 @@ def plot_discounted_pbp(pbp_array, proj_name):
         pbp_array (np.array): array PBP per simulazione
         proj_name (str): nome progetto
     """
-    plt.figure(figsize=(8,5))
-    plt.hist(pbp_array[~np.isnan(pbp_array)], bins=range(1, int(np.nanmax(pbp_array))+2), 
-             color='skyblue', edgecolor='black', alpha=0.7)
-    plt.title(f"📊 Distribuzione Payback Period attualizzato - {proj_name}")
-    plt.xlabel("Payback Period (anni)")
-    plt.ylabel("Frequenza")
-    plt.grid(axis='y', alpha=0.3)
-    plt.show()
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.hist(pbp_array[~np.isnan(pbp_array)], 
+            bins=range(1, int(np.nanmax(pbp_array))+2), 
+            color='skyblue', edgecolor='black', alpha=0.7)
+    ax.set_title(f"📊 Distribuzione Payback Period attualizzato - {proj_name}")
+    ax.set_xlabel("Payback Period (anni)")
+    ax.set_ylabel("Frequenza")
+    ax.grid(axis='y', alpha=0.3)
+    return fig
+
 
 
 
