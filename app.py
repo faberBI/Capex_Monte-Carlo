@@ -239,7 +239,7 @@ if st.button("▶️ Avvia simulazioni"):
         st.write(f"**PBP attualizzato medio (mediana NPV):** {pbp_median} anni")
 
         # Grafico NPV cumulato a serie storica
-        st.pyplot(plot_discounted_pbp(npv_cum_matrix, proj['name']))
+        st.pyplot(plot_cumulative_npv(npv_cum_matrix, proj['name']))
 
     st.session_state.results = results
 
@@ -315,6 +315,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
