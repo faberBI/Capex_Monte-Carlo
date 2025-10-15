@@ -164,6 +164,62 @@ def plot_cumulative_npv(npv_cum_matrix, proj_name):
     ax.legend()
     return fig
 
+def plot_probs_kri(downside_prob, project_name):
+    """
+    Gauge professionale: KRI basato sulla probabilità di NPV < 0.
+    
+    Soglie:
+    - Verde: <3%
+    - Giallo: <6%
+    - Rosso: >=6%
+    """
+    # Definizione soglie
+    soglia_verde = 0.03
+    soglia_gialla = 0.06
+
+    # Determina livello di rischio e colore
+    if downside_prob < soglia_verde:
+        risk_level = "Basso"
+        color = "#22c55e"  # verde
+    elif downside_prob < soglia_gialla:
+        risk_level = "Medio"
+        color = "#facc15"  # giallo
+    else:
+        risk_level = "Alto"
+        color = "#ef4444"  # rosso
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=downside_prob*100,
+        number={'suffix': "%", 'font': {'size': 36, 'color': color}},
+        title={
+            'text': f"KRI - {project_name}: {risk_level}",
+            'font': {'size': 22, 'color': "darkblue"}
+        },
+        gauge={
+            'axis': {'range': [0, 100], 'tickvals': [0, 20, 40, 60, 80, 100]},
+            'bar': {'color': "black", 'thickness': 0.05},
+            'steps': [
+                {'range': [0, soglia_verde*100], 'color': "#d1fae5"},
+                {'range': [soglia_verde*100, soglia_gialla*100], 'color': "#fef08a"},
+                {'range': [soglia_gialla*100, 100], 'color': "#fecaca"}
+            ],
+            'threshold': {
+                'line': {'color': color, 'width': 6},
+                'thickness': 0.8,
+                'value': downside_prob*100
+            }
+        }
+    ))
+
+    fig.update_layout(
+        paper_bgcolor='white',
+        font={'color': "darkblue", 'family': "Arial"},
+        height=450,
+    )
+
+    return fig
+
 
 
 
