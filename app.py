@@ -267,9 +267,78 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-# ------------------ Matrice rischio-rendimento ------------------
+# ------------------ Matrice rischio-rendimento e GPT ------------------
 if st.session_state.results:
     results = st.session_state.results
     st.subheader("📌 Matrice rischio-rendimento")
     st.pyplot(plot_risk_return_matrix(results))
+
+    # Preparazione dati per GPT
+    client = OpenAI(api_key=api_key)
+    summary_df = pd.DataFrame([
+        {
+            "name": r["name"],
+            "expected_npv": r["expected_npv"],
+            "car": r["car"],
+            "downside_prob": r["downside_prob"],
+            "cvar": r["cvar"],
+            "avg_yearly_cashflow": np.mean(r["yearly_cash_flows"])
+        }
+        for r in results
+    ])
+
+    prompt = f"""
+Ecco i risultati sintetici dei progetti (Monte Carlo CAPEX Risk):
+
+{summary_df.to_string(index=False)}
+
+Fornisci un commento sintetico e professionale, evidenziando:
+- Miglior trade-off rischio/rendimento.
+- Robustezza dei NPV stimati.
+- Eventuali rischi particolari emersi dalle simulazioni.
+"""
+
+    if st.button("💬 Genera commento GPT"):
+        for _ in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                st.subheader("📑 Commento di GPT")
+                st.write(response.choices[0].message.content)
+                break
+            except OpenAIError:
+                st.warning("Errore OpenAI (es. rate limit), riprovo tra 5 secondi...")
+                time.sleep(5)
+
+# ------------------ Export risultati ------------------
+if st.session_state.results:
+    results = st.session_state.results
+    st.subheader("💾 Esporta risultati")
+    
+    df_summary = pd.DataFrame([{k:v for k,v in r.items() if k!="npv_array"} for r in results])
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # Sheet riepilogo
+        df_summary.to_excel(writer, index=False, sheet_name='Risultati')
+        # Sheet NPV per progetto
+        for r in results:
+            npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
+            sheet_name = r["name"][:31]  # Excel max 31 char
+            npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
+    excel_data = output.getvalue()
+    
+    st.download_button(
+        label="📥 Scarica risultati in Excel",
+        data=excel_data,
+        file_name="capex_risultati.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
 
