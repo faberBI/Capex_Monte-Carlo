@@ -231,7 +231,7 @@ if st.button("▶️ Avvia simulazioni"):
         st.markdown(f"**KRI sintetico:** {kri_text} ({kri_pct*100:.1f}% del valore atteso)")
 
         st.plotly_chart(plot_probs_kri(sim_result['downside_prob'],  proj["name"]), use_container_width=True)
-        kri_probs_text = "🔴 Rischio Alto" if sim_result['downside_prob']> 0.7 else ("🟡 Rischio Medio" if sim_result['downside_prob'] > 0.05 else "🟢 Rischio Basso")
+        kri_probs_text = "🔴 Rischio Alto" if sim_result['downside_prob']> 0.07 else ("🟡 Rischio Medio" if sim_result['downside_prob'] > 0.05 else "🟢 Rischio Basso")
         st.markdown(f"**KRI sintetico:** {kri_probs_text}")
 
         # ------------------ NPV cumulato e Payback ------------------
@@ -320,6 +320,7 @@ if st.session_state.results:
         file_name="capex_risultati.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
