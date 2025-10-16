@@ -203,7 +203,7 @@ for i, proj in enumerate(st.session_state.projects):
                     year_cost.pop("p3", None)
                 elif selected_dist == "Uniforme":
                     year_cost["p1"] = st.number_input(f"Min (p1)", value=year_cost.get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{y}")
-                    year_cost["p2"] = st.number_input(f"Max (p2)", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{y})
+                    year_cost["p2"] = st.number_input(f"Max (p2)", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{y}")
                     year_cost.pop("p3", None)
 
         if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
@@ -415,6 +415,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
