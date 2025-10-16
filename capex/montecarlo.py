@@ -151,6 +151,89 @@ def sample(dist_obj, year_idx=None):
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 
+def calculate_yearly_financials(proj):
+    """
+    Calcola i valori medi anno per anno per un progetto:
+    Ricavi, Costi, Ammortamenti, EBITDA, EBIT, Tasse, NOPAT, FCF, DCF.
+    
+    Args:
+        proj (dict): progetto con tutti i dati
+    
+    Returns:
+        pd.DataFrame: tabella anno per anno con tutte le metriche
+        float: NPV medio
+    """
+    years = proj["years"]
+
+    # Inizializzo array
+    ricavi = np.zeros(years)
+    var_costs = np.zeros(years)
+    fixed_costs = np.array(proj.get("fixed_costs", [0]*years))
+    other_costs = np.zeros(years)
+    capex_init = np.zeros(years)
+    capex_rec = np.array(proj.get("capex_rec", [0]*years))
+    depreciation = np.array(proj.get("depreciation", [0]*years))
+    depreciation_0 = proj.get("depreciation_0", 0)
+    ammortamenti_tot = np.array([depreciation_0] + list(depreciation[1:]))
+
+    # --- Calcolo medie anno per anno ---
+    for year in range(years):
+        # Ricavi medi
+        total_rev = 0
+        for rev in proj["revenues_list"]:
+            price = rev["price"][year]["p1"]
+            quantity = rev["quantity"][year]["p1"]
+            total_rev += price * quantity
+        ricavi[year] = total_rev
+
+        # Costi variabili
+        var_costs[year] = total_rev * proj["costs"]["var_pct"]
+
+        # Costi aggiuntivi medi
+        other_costs[year] = sum(cost["values"][year]["p1"] for cost in proj.get("other_costs", []))
+
+        # CAPEX iniziale solo anno 0
+        capex_init[year] = proj["capex"] if year == 0 else 0
+
+    # --- EBITDA, EBIT, Tasse, NOPAT, FCF, DCF ---
+    ebitda = ricavi - var_costs - fixed_costs - other_costs
+    ebit = ebitda - ammortamenti_tot
+
+    # Tasse: segno coerente con EBIT
+    taxes = np.where(ebit >= 0, -ebit * proj["tax"], -ebit * proj["tax"])
+
+    nopat = ebit + taxes  # perché taxes hanno già il segno corretto
+    fcf = ebitda + taxes - capex_init - capex_rec
+
+    # DCF
+    wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
+    dcf = fcf / ((1 + wacc) ** (np.arange(1, years+1)))
+
+    # NPV medio
+    npv_medio = np.sum(dcf)
+
+    # --- Creazione DataFrame ---
+    df_financials = pd.DataFrame({
+        "Anno": np.arange(1, years+1),
+        "Ricavi": ricavi,
+        "Costi variabili": var_costs,
+        "Costi fissi": fixed_costs,
+        "Costi aggiuntivi": other_costs,
+        "CAPEX iniziale": capex_init,
+        "CAPEX ricorrente": capex_rec,
+        "Ammortamenti": ammortamenti_tot,
+        "EBITDA": ebitda,
+        "EBIT": ebit,
+        "Tasse": taxes,
+        "NOPAT": nopat,
+        "FCF": fcf,
+        "DCF": dcf
+    })
+
+    return df_financials, npv_medio
+
+
+
 
 
 
