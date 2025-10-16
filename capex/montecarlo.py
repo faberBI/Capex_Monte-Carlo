@@ -5,14 +5,14 @@ import pandas as pd
 
 def run_montecarlo(proj, n_sim, wacc):
     """
-    Esegue simulazioni Monte Carlo per un progetto CAPEX secondo la logica:
+    Simulazioni Monte Carlo per un progetto CAPEX con logica:
     EBITDA = Ricavi - Costi
     EBIT = EBITDA - Ammortamenti
     Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
     FCF = EBITDA + Tasse - CAPEX
 
     Args:
-        proj (dict): progetto con informazioni (capex, revenues, costi, ammortamenti, ecc.)
+        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
         n_sim (int): numero simulazioni
         wacc (float): tasso di sconto WACC
 
@@ -24,10 +24,23 @@ def run_montecarlo(proj, n_sim, wacc):
     yearly_cash_flows = np.zeros((n_sim, years))
     pbp_array = np.zeros(n_sim)
 
+    def calculate_fractional_pbp(discounted_cum_cf):
+        """Interpolazione lineare per PBP frazionario"""
+        negative_idx = np.where(discounted_cum_cf < 0)[0]
+        if len(negative_idx) == 0:
+            return 1.0  # PBP < primo anno
+        last_neg_idx = negative_idx[-1]
+        if last_neg_idx == len(discounted_cum_cf) - 1:
+            return np.nan  # mai positivo
+        cf_before = discounted_cum_cf[last_neg_idx]
+        cf_after = discounted_cum_cf[last_neg_idx + 1]
+        fraction = -cf_before / (cf_after - cf_before)
+        return last_neg_idx + 1 + fraction
+
     for sim in range(n_sim):
         cash_flows = []
+        discounted_cf_cum = 0
 
-        # --- Calcolo FCF anno per anno ---
         for year in range(years):
             # CAPEX
             capex_init = proj["capex"] if year == 0 else 0
@@ -52,14 +65,14 @@ def run_montecarlo(proj, n_sim, wacc):
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
 
-            # --- EBITDA ---
+            # --- Calcolo EBITDA ---
             ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
 
-            # --- EBIT ---
+            # --- Calcolo EBIT ---
             ebit = ebitda - ammortamenti_tot
 
             # --- Tasse ---
-            taxes = -ebit * proj["tax"]  # esce negativa se EBIT positivo, positiva se EBIT negativo
+            taxes = -ebit * proj["tax"]  # uscita positiva se EBIT>0, beneficio se EBIT<0
             if ebit < 0:
                 taxes = -taxes  # beneficio fiscale positivo
 
@@ -67,18 +80,13 @@ def run_montecarlo(proj, n_sim, wacc):
             fcf = ebitda + taxes - capex_init - capex_rec
             cash_flows.append(fcf)
 
-        cash_flows = np.array(cash_flows)
+        # --- PBP frazionario ---
+        discounted_cum_cf = np.cumsum([cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(cash_flows)])
+        pbp_array[sim] = calculate_fractional_pbp(discounted_cum_cf)
 
-        # --- Payback period attualizzato ---
-        discounted_cum_cf = np.cumsum(cash_flows / ((1 + wacc) ** np.arange(1, years + 1)))
-        if np.all(discounted_cum_cf < 0):
-            pbp_array[sim] = np.nan
-        else:
-            pbp_array[sim] = np.argmax(discounted_cum_cf >= 0) + 1
-
-        # --- NPV ---
-        discounted_cf = cash_flows / ((1 + wacc) ** np.arange(1, years + 1))
-        npv_array[sim] = np.sum(discounted_cf)
+        # --- NPV totale ---
+        discounted_cf = [cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(cash_flows)]
+        npv_array[sim] = sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
     avg_discounted_pbp = np.nanmean(pbp_array)
@@ -98,9 +106,7 @@ def run_montecarlo(proj, n_sim, wacc):
     }
 
     # --- Percentili Payback ---
-    pbp_percentiles = {
-        f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles
-    }
+    pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
     # --- Calcolo CVaR ---
     car_5pct = np.percentile(npv_array, 5)
@@ -120,6 +126,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
+
 
 
 
@@ -229,6 +236,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
