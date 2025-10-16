@@ -268,7 +268,6 @@ if st.session_state.results:
         
         st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
         st.dataframe(df_financials.style.format("{:.2f}"))
-        st.markdown(f"**NPV medio:** {npv_medio:.2f}")
 
 
 
@@ -379,6 +378,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
