@@ -81,6 +81,7 @@ def plot_car_kri(car_value, expected_npv, project_name):
     """
     # Calcolo KRI corretto
     kri_pct = (expected_npv - car_value) / expected_npv if expected_npv != 0 else 1.0
+    kri_pct = np.clip(kri_pct, 0, 1)
 
     # Soglie rischio
     soglia_alta = 0.5
@@ -219,6 +220,7 @@ def plot_probs_kri(downside_prob, project_name):
     )
 
     return fig
+
 
 
 
