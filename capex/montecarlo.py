@@ -52,32 +52,24 @@ def run_montecarlo(proj, n_sim, wacc):
         pbp_found = False
 
         for year in range(years):
-            # --- gestioni sicure ---
             capex_init = proj["capex"] if year == 0 else 0
             capex_rec_list = proj.get("capex_rec") or [0] * years
             capex_rec = capex_rec_list[year]
-
             fixed_costs_list = proj.get("fixed_costs") or [0] * years
             fixed_cost = fixed_costs_list[year]
-
             depreciation_list = proj.get("depreciation") or [0] * years
             depreciation = depreciation_list[year]
 
-            # --- Ricavi ---
             total_revenue = sum(
                 sample(rev["price"], year) * sample(rev["quantity"], year)
                 for rev in proj["revenues_list"]
             )
 
-            # --- Costi ---
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
-
-            # --- Cash Flow ---
             cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
             cash_flows.append(cf)
 
-            # --- PBP attualizzato ---
             discounted_cf_cum += cf / ((1 + wacc) ** (year + 1))
             if not pbp_found and discounted_cf_cum >= 0:
                 pbp_array[sim] = year + 1
@@ -86,24 +78,38 @@ def run_montecarlo(proj, n_sim, wacc):
         if not pbp_found:
             pbp_array[sim] = np.nan
 
-        # --- NPV ---
         discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
         npv_array[sim] = sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
     avg_discounted_pbp = np.nanmean(pbp_array)
 
+    # --- Percentili annuali ---
+    percentiles = [5, 25, 50, 75, 95]
+    yearly_percentiles = {
+        f"p{p}": np.percentile(yearly_cash_flows, p, axis=0).tolist()
+        for p in percentiles
+    }
+
+    # --- Percentili del Payback ---
+    pbp_percentiles = {
+        f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles
+    }
+
     return {
         "npv_array": npv_array,
-        "yearly_cash_flows": yearly_cash_flows,  # <--- manteniamo TUTTE le simulazioni, serve per il grafico cumulato
+        "yearly_cash_flows": yearly_cash_flows,
         "expected_npv": np.mean(npv_array),
         "car": np.percentile(npv_array, 5),
-        "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)]) 
-                if np.any(npv_array <= np.percentile(npv_array, 5)) else np.percentile(npv_array, 5),
+        "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)])
+                 if np.any(npv_array <= np.percentile(npv_array, 5)) else np.percentile(npv_array, 5),
         "downside_prob": np.mean(npv_array < 0),
         "discounted_pbp": avg_discounted_pbp,
-        "pbp_array": pbp_array
+        "pbp_array": pbp_array,
+        "yearly_percentiles": yearly_percentiles,  # ✅ aggiunto
+        "pbp_percentiles": pbp_percentiles         # ✅ aggiunto
     }
+
 
 
 
