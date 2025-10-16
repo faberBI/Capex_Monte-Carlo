@@ -300,26 +300,40 @@ Fornisci un commento sintetico e professionale, evidenziando:
 if st.session_state.results:
     results = st.session_state.results
     st.subheader("💾 Esporta risultati")
-    
-    df_summary = pd.DataFrame([{k:v for k,v in r.items() if k!="npv_array"} for r in results])
-    
+
+    df_summary = pd.DataFrame([{k: v for k, v in r.items() if k not in ["npv_array", "yearly_cash_flows", "yearly_percentiles", "pbp_percentiles"]} for r in results])
+
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Sheet riepilogo
         df_summary.to_excel(writer, index=False, sheet_name='Risultati')
-        # Sheet NPV per progetto
+
+        # Sheet dettaglio per progetto
         for r in results:
-            npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
-            sheet_name = r["name"][:31]  # Excel max 31 char
-            npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
+            proj_name = r["name"][:25]
+            
+            # NPV array
+            pd.DataFrame(r["npv_array"], columns=["NPV"]).to_excel(writer, index=False, sheet_name=f"{proj_name}_NPV")
+            
+            # Percentili cash flow annuali
+            df_cf = pd.DataFrame(r["yearly_percentiles"])
+            df_cf.insert(0, "Anno", range(1, len(df_cf["p50"]) + 1))
+            df_cf.to_excel(writer, index=False, sheet_name=f"{proj_name}_CF")
+            
+            # Percentili payback
+            df_pbp = pd.DataFrame(list(r["pbp_percentiles"].items()), columns=["Percentile", "PBP"])
+            df_pbp.to_excel(writer, index=False, sheet_name=f"{proj_name}_PBP")
+
     excel_data = output.getvalue()
-    
+
     st.download_button(
         label="📥 Scarica risultati in Excel",
         data=excel_data,
-        file_name="capex_risultati.xlsx",
+        file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+
 
 
 
