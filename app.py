@@ -240,7 +240,7 @@ if st.button("▶️ Avvia simulazioni"):
 
         # ------------------ KRI corretto ------------------
         kri_pct = (sim_result["expected_npv"] - sim_result["car"]) / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
-        kri_pct = min(KRI,1)
+        kri_pct = np.min(kri_pct,1)
         kri_text = "🔴 Rischio Alto" if kri_pct > 0.5 else ("🟡 Rischio Medio" if kri_pct > 0.25 else "🟢 Rischio Basso")
         st.markdown(f"**KRI sintetico on CaR:** {kri_text} ({kri_pct*100:.1f}% del valore atteso)")
 
@@ -379,6 +379,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
