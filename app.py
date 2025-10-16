@@ -261,74 +261,48 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-
+# SHOW AVERAGE RESULTS
 if st.session_state.results:
     for r in st.session_state.results:
-        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        years = proj["years"]
+        years = r["yearly_cash_flows"].shape[1]
 
-        # --- Tabelle basate sulle medie delle simulazioni ---
-        mean_cf = np.mean(r["yearly_cash_flows"], axis=0)  # FCF medio per anno
+        # --- Prendiamo la media dei FCF dalle simulazioni ---
+        fcf_mean = np.mean(r["yearly_cash_flows"], axis=0)
 
+        # --- Per calcolare retroattivamente Ricavi, Costi, EBIT, NOPAT ---
+        # Qui approssimiamo: Costi Totali = Ricavi - FCF + Ammortamenti + CAPEX
         ricavi_mean = []
         var_cost_mean = []
-        fixed_cost_mean = proj.get("fixed_costs", [0]*years)
-        other_cost_mean = []
+        depreciation_0_list = []
+        depreciation_list = []
+
+        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
+        capex_rec_list = proj.get("capex_rec", [0]*years)
+        fixed_cost_list = proj.get("fixed_costs", [0]*years)
         depreciation_list = proj.get("depreciation", [0]*years)
         depreciation_0 = proj.get("depreciation_0", 0)
-        ebit_list = []
-        taxes_mean = []
-        nopat_list = []
-        fcf_list = []
-        dcf_list = []
 
         for year in range(years):
-            # Ricavi medi per anno (media simulazioni)
-            total_revenue = np.mean([
-                np.mean([
-                    sample(rev["price"], year) * sample(rev["quantity"], year)
-                    for _ in range(100)  # media stocastica veloce
-                ])
-                for rev in proj["revenues_list"]
-            ])
-            
-            var_cost = total_revenue * proj["costs"]["var_pct"]
-            other_costs_total = np.mean([
-                np.mean([sample(cost.get("values", None), year) for _ in range(100)])
-                for cost in proj.get("other_costs", [])
-            ])
-            
-            # EBIT = Ricavi - Costi Totali - Ammortamenti
-            ebit = total_revenue - var_cost - fixed_cost_mean[year] - other_costs_total - depreciation_list[year] - (depreciation_0 if year==0 else 0)
+            # ricavi medi anno = EBITDA + costi + ammortamenti
+            total_cf = fcf_mean[year]
+            dep = depreciation_list[year] + (depreciation_0 if year==0 else 0)
+            capex_total = (proj["capex"] if year==0 else 0) + capex_rec_list[year]
+            ebit = total_cf + capex_total + dep  # retrocalcolo
             taxes = ebit * proj["tax"] if ebit > 0 else -ebit * proj["tax"]
             nopat = ebit - taxes
-            fcf = nopat - (proj["capex"] if year==0 else 0) - proj.get("capex_rec", [0]*years)[year] + depreciation_list[year] + (depreciation_0 if year==0 else 0)
-            dcf = fcf / ((1 + wacc) ** (year + 1))
-
-            # Popola le liste
-            ricavi_mean.append(total_revenue)
-            var_cost_mean.append(var_cost + fixed_cost_mean[year] + other_costs_total)
-            ebit_list.append(ebit)
-            taxes_mean.append(taxes)
-            nopat_list.append(nopat)
-            fcf_list.append(fcf)
-            dcf_list.append(dcf)
+            ricavi_mean.append(ebit + taxes + var_cost_mean[year-1] if year>0 else ebit + taxes)  # approssimazione
+            var_cost_mean.append(ricavi_mean[-1] - ebit)  # costi = ricavi - EBIT
+            depreciation_0_list.append(depreciation_0 if year==0 else 0)
 
         df_summary = pd.DataFrame({
             "Anno": range(1, years+1),
-            "Ricavi": ricavi_mean,
-            "Costi Totali": var_cost_mean,
-            "EBITDA": np.array(ricavi_mean) - np.array(var_cost_mean) + np.array(depreciation_list),
-            "EBIT": ebit_list,
-            "Tasse": taxes_mean,
-            "NOPAT": nopat_list,
-            "FCF": fcf_list,
-            "DCF": dcf_list,
-            "NPV cumulato medio": np.cumsum(dcf_list)
+            "FCF medio": fcf_mean,
+            "NPV cumulato medio": np.cumsum(fcf_mean)
         })
 
-        st.subheader(f"📊 Riepilogo per anno - {r['name']}")
+        st.subheader(f"📊 Riepilogo FCF per anno - {r['name']}")
         st.dataframe(df_summary.style.format("{:.2f}"))
+
 
 
 # ------------------ Matrice rischio-rendimento e GPT ------------------
@@ -438,6 +412,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
