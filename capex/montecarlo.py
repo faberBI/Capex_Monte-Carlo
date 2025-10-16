@@ -1,3 +1,5 @@
+## buono
+
 import numpy as np
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
@@ -44,7 +46,7 @@ def run_montecarlo(proj, n_sim, wacc):
 
         for year in range(years):
             # CAPEX
-            capex_init = proj["capex"] if year == 0 else 0
+            # capex_init = proj["capex"] if year == 0 else 0
             capex_rec = proj.get("capex_rec", [0]*years)[year]
 
             # Costi fissi e ammortamenti
@@ -52,8 +54,6 @@ def run_montecarlo(proj, n_sim, wacc):
             depreciation = proj.get("depreciation", [0]*years)[year]
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
-            # depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
-            ammortamenti_tot = depreciation #+ depreciation_0
 
             # Ricavi stocastici
             total_revenue = sum(
@@ -77,13 +77,15 @@ def run_montecarlo(proj, n_sim, wacc):
                 taxes = -taxes  # beneficio fiscale positivo
 
             # --- FCF ---
-            capex_all = capex_init + capex_rec
-
+            #capex_all = capex_init + capex_rec
+            capex_all =  capex_rec
+            
             if capex_all== 0 and ebitda<1:
                 taxes = taxes*-1
                 fcf = ebitda + taxes - capex_all
             else:
-                fcf = ebitda + taxes - capex_init - capex_rec
+                # fcf = ebitda + taxes - capex_init - capex_rec
+                fcf = ebitda + taxes - capex_rec
 
             # --- DCF attualizzato ---
             dcf = fcf / ((1 + wacc) ** (year + 1))
