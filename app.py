@@ -85,11 +85,11 @@ for i, proj in enumerate(st.session_state.projects):
             for y in range(proj["years"]):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
-        # ------------------ Ricavi multipli con distribuzione ------------------
+                # ------------------ Ricavi multipli con distribuzione ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
-
+        
             # Selezione tipo
             rev["type"] = st.selectbox(
                 "Tipo ricavo",
@@ -97,7 +97,7 @@ for i, proj in enumerate(st.session_state.projects):
                 index=["Deterministico", "Stocastico"].index(rev.get("type", "Deterministico")),
                 key=f"rev_type_{i}_{j}"
             )
-
+        
             if rev["type"] == "Deterministico":
                 rev["value"] = st.number_input(
                     "Valore ricavo deterministico",
@@ -108,12 +108,13 @@ for i, proj in enumerate(st.session_state.projects):
                 # Ricavi stocastici anno per anno
                 for key in ["price", "quantity"]:
                     if key not in rev:
-                        rev[key] = []
-                    while len(rev[key]) < proj["years"]:
-                        rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
-                    rev[key] = rev[key][:proj["years"]]
-
+                        rev[key] = [None] * proj["years"]
+        
+                    # Assicurati che ogni anno abbia un dizionario valido
                     for y in range(proj["years"]):
+                        if rev[key][y] is None:
+                            rev[key][y] = {"dist": "Normale", "p1": 0.0, "p2": 0.0}
+        
                         st.markdown(f"Anno {y+1} - {key}")
                         dist_type = st.selectbox(
                             "Distribuzione",
@@ -122,30 +123,32 @@ for i, proj in enumerate(st.session_state.projects):
                             key=f"{key}_dist_{i}_{j}_{y}"
                         )
                         rev[key][y]["dist"] = dist_type
+        
                         if dist_type == "Normale":
-                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Std Dev (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Std Dev (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                             rev[key][y].pop("p3", None)
                         elif dist_type == "Triangolare":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3",0.0), key=f"{key}_p3_{i}_{j}_{y}")
+                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
                         elif dist_type == "Lognormale":
-                            rev[key][y]["p1"] = st.number_input("Mu (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Sigma (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p1"] = st.number_input("Mu (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Sigma (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                             rev[key][y].pop("p3", None)
                         elif dist_type == "Uniforme":
-                            rev[key][y]["p1"] = st.number_input("Min (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Max (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p1"] = st.number_input("Min (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Max (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                             rev[key][y].pop("p3", None)
-
+        
+        # Pulsante per aggiungere una nuova voce di ricavo
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
                 "name": f"Ricavo {len(proj['revenues_list']) + 1}",
                 "type": "Deterministico",
                 "value": 0.0,
-                "price": [],
-                "quantity": []
+                "price": [None] * proj["years"],
+                "quantity": [None] * proj["years"]
             })
 
         # ------------------ Costi Variabili ------------------
@@ -415,6 +418,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
