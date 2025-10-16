@@ -55,7 +55,7 @@ def add_project():
 # ------------------ UI ------------------
 st.title("📊 CAPEX @Risk Framework by ERM")
 st.button("➕ Aggiungi progetto", on_click=add_project)
-n_sim = st.slider("Numero simulazioni Monte Carlo", 1000, 1_000_000, 10_000)
+n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000)
 
 # ------------------ Loop progetti ------------------
 for i, proj in enumerate(st.session_state.projects):
@@ -296,13 +296,13 @@ Fornisci un commento sintetico e professionale, evidenziando:
                 st.warning("Errore OpenAI (es. rate limit), riprovo tra 5 secondi...")
                 time.sleep(5)
 
-# ------------------ Export risultati ------------------
+# ------------------ Export risultati completo ------------------
 if st.session_state.results:
     results = st.session_state.results
     output = io.BytesIO()
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # --- Sheet riepilogo ---
+        # --- Sheet riepilogo generale ---
         df_summary = pd.DataFrame([
             {
                 "name": r["name"],
@@ -314,36 +314,48 @@ if st.session_state.results:
             } for r in results
         ])
         df_summary.to_excel(writer, index=False, sheet_name='Risultati')
-        
-        # --- Sheet per progetto: NPV simulazioni ---
+
+        # --- Sheet per ciascun progetto ---
         for r in results:
+            project_name = r['name'][:31]  # Excel max 31 char
+
+            # 1️⃣ NPV simulazioni
             npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
-            sheet_name = f"{r['name']}_NPV"[:31]  # max 31 char
-            npv_df.to_excel(writer, index=False, sheet_name=sheet_name)
-            
-            # --- Percentili cash flow attualizzati ---
-            cf_disc_df = pd.DataFrame(r["yearly_cf_disc_percentiles"])
-            sheet_name_cf = f"{r['name']}_CF_Percentili"[:31]
-            cf_disc_df.to_excel(writer, index=False, sheet_name=sheet_name_cf)
-            
-            # --- Percentili NPV cumulato ---
-            npv_cum_df = pd.DataFrame(r["yearly_npv_cum_percentiles"])
-            sheet_name_npv_cum = f"{r['name']}_NPV_Cum_Percentili"[:31]
-            npv_cum_df.to_excel(writer, index=False, sheet_name=sheet_name_npv_cum)
-            
-            # --- Percentili PBP ---
-            pbp_df = pd.DataFrame(r["pbp_percentiles"], index=[0])
-            sheet_name_pbp = f"{r['name']}_PBP_Percentili"[:31]
-            pbp_df.to_excel(writer, index=False, sheet_name=sheet_name_pbp)
-    
+            npv_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV")
+
+            # 2️⃣ Cash flow annuali
+            cf_df = pd.DataFrame(r["yearly_cash_flows"], columns=[f"Anno {i+1}" for i in range(r["yearly_cash_flows"].shape[1])])
+            cf_df.to_excel(writer, index=False, sheet_name=f"{project_name}_CashFlow")
+
+            # 3️⃣ Percentili cash flow annuali
+            cf_pct_df = pd.DataFrame(r["yearly_cashflow_percentiles"])
+            cf_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_CF_Percentili")
+
+            # 4️⃣ NPV cumulato
+            npv_cum_df = pd.DataFrame(r["npv_cum_matrix"], columns=[f"Anno {i+1}" for i in range(r["npv_cum_matrix"].shape[1])])
+            npv_cum_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV_Cum")
+
+            # 5️⃣ Percentili NPV cumulato
+            npv_cum_pct_df = pd.DataFrame(r["yearly_npv_cum_percentiles"])
+            npv_cum_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV_CumPct")
+
+            # 6️⃣ Payback period simulazioni
+            pbp_df = pd.DataFrame(r["pbp_array"], columns=["PBP"])
+            pbp_df.to_excel(writer, index=False, sheet_name=f"{project_name}_PBP")
+
+            # 7️⃣ Percentili Payback period
+            pbp_pct_df = pd.DataFrame(r["pbp_percentiles"], index=[0])
+            pbp_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_PBP_Pct")
+
     excel_data = output.getvalue()
-    
+
     st.download_button(
         label="📥 Scarica risultati completi in Excel",
         data=excel_data,
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
