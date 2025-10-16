@@ -3,29 +3,32 @@ from .costs import compute_costs
 from capex.wacc import calculate_wacc
 import pandas as pd
 
-def is_year_stochastic(proj, year):
-    """Controlla se un anno ha parametri stocastici in ricavi o altri costi"""
-    # Ricavi
-    for rev in proj["revenues_list"]:
-        price = rev["price"][year]
-        quantity = rev["quantity"][year]
-        if price.get("p2", 0) > 0 or quantity.get("p2", 0) > 0:
-            return True
-    # Altri costi
-    for cost in proj.get("other_costs", []):
-        val = cost["values"][year]
-        if val.get("p2", 0) > 0:
-            return True
-    return False
 
-def run_montecarlo_adaptive(proj, n_sim, wacc):
-    """Monte Carlo che usa valori deterministici se l'anno non è stocastico"""
+
+def run_montecarlo(proj, n_sim, wacc):
+    """
+    Simulazioni Monte Carlo per un progetto CAPEX con logica:
+    EBITDA = Ricavi - Costi
+    EBIT = EBITDA - Ammortamenti
+    Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
+    FCF = EBITDA + Tasse - CAPEX
+
+    Args:
+        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
+        n_sim (int): numero simulazioni
+        wacc (float): tasso di sconto WACC
+
+    Returns:
+        dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
+    """
+
     years = proj["years"]
     npv_array = np.zeros(n_sim)
-    yearly_dcf = np.zeros((n_sim, years))
+    yearly_dcf = np.zeros((n_sim, years))  # DCF attualizzati
     pbp_array = np.zeros(n_sim)
 
     def calculate_fractional_pbp(discounted_cum_cf):
+        """Interpolazione lineare per PBP frazionario"""
         negative_idx = np.where(discounted_cum_cf < 0)[0]
         if len(negative_idx) == 0:
             return 1.0
@@ -41,26 +44,8 @@ def run_montecarlo_adaptive(proj, n_sim, wacc):
         dcf_per_year = []
 
         for year in range(years):
-            # Controlla se l'anno è stocastico
-            stochastic = is_year_stochastic(proj, year)
-
-            # Ricavi
-            if stochastic:
-                total_revenue = sum(
-                    sample(rev["price"], year) * sample(rev["quantity"], year)
-                    for rev in proj["revenues_list"]
-                )
-                other_costs_total = sum(
-                    sample(cost.get("values", None), year) for cost in proj.get("other_costs", [])
-                )
-            else:
-                total_revenue = sum(
-                    rev["price"][year]["p1"] * rev["quantity"][year]["p1"]
-                    for rev in proj["revenues_list"]
-                )
-                other_costs_total = sum(
-                    cost["values"][year]["p1"] for cost in proj.get("other_costs", [])
-                )
+            # CAPEX ricorrente
+            capex_rec = proj.get("capex_rec", [0]*years)[year]
 
             # Costi fissi e ammortamenti
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
@@ -68,20 +53,43 @@ def run_montecarlo_adaptive(proj, n_sim, wacc):
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
 
-            # EBITDA e EBIT
-            ebitda = total_revenue - fixed_cost - other_costs_total
+            # Ricavi stocastici o deterministici
+            total_revenue = 0
+            for rev in proj["revenues_list"]:
+                if rev.get("type", "Deterministico") == "Deterministico":
+                    total_revenue += rev.get("value", 0.0)
+                else:
+                    price = sample(rev["price"], year)
+                    quantity = sample(rev["quantity"], year)
+                    total_revenue += price * quantity
+
+            # Costi variabili e aggiuntivi
+            var_cost = total_revenue * proj["costs"]["var_pct"]
+            other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+
+            # --- EBITDA ---
+            ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
+
+            # --- EBIT ---
             ebit = ebitda - ammortamenti_tot
 
-            # Tasse
+            # --- Tasse ---
             taxes = -ebit * proj["tax"]
             if ebit < 0:
-                taxes = -taxes
+                taxes = -taxes  # beneficio fiscale positivo
 
-            # CAPEX
-            capex_rec = proj.get("capex_rec", [0]*years)[year]
-            fcf = ebitda + taxes - capex_rec
+            # --- FCF ---
+            #capex_all = capex_init + capex_rec
+            capex_all =  capex_rec
+            
+            if capex_all== 0 and ebitda<1:
+                taxes = taxes*-1
+                fcf = ebitda + taxes - capex_all
+            else:
+                # fcf = ebitda + taxes - capex_init - capex_rec
+                fcf = ebitda + taxes - capex_rec
 
-            # DCF attualizzato
+            # --- DCF attualizzato ---
             dcf = fcf / ((1 + wacc) ** (year + 1))
             dcf_per_year.append(dcf)
 
@@ -92,15 +100,18 @@ def run_montecarlo_adaptive(proj, n_sim, wacc):
 
     avg_discounted_pbp = np.nanmean(pbp_array)
 
-    # Percentili
+    # Percentili annuali DCF
     percentiles = [5, 25, 50, 75, 95]
     yearly_dcf_percentiles = {
         f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles
     }
+
+    # Percentili cumulati NPV
     npv_cum_matrix = np.cumsum(yearly_dcf, axis=1)
     yearly_npv_cum_percentiles = {
         f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
     }
+
     pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
     car_5pct = np.percentile(npv_array, 5)
@@ -120,7 +131,6 @@ def run_montecarlo_adaptive(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
-
 
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
@@ -227,6 +237,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
