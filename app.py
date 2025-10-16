@@ -6,7 +6,7 @@ import time
 from openai import OpenAI, OpenAIError
 
 from capex.wacc import calculate_wacc
-from capex.montecarlo import (run_montecarlo, calculate_yearly_financials)
+from capex.montecarlo import run_montecarlo, calculate_yearly_financials
 from capex.visuals import (
     plot_npv_distribution,
     plot_boxplot,
