@@ -78,7 +78,7 @@ def run_montecarlo(proj, n_sim, wacc):
             capex_all = capex_init + capex_rec
             
             if capex_all== 0 and ebitda<1:
-                fcf = taxes
+                fcf = taxes*-1
             else:
                 fcf = ebitda + taxes - capex_init - capex_rec
 
