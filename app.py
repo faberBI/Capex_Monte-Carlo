@@ -6,7 +6,7 @@ import time
 from openai import OpenAI, OpenAIError
 
 from capex.wacc import calculate_wacc
-from capex.montecarlo import run_montecarlo
+from capex.montecarlo import (run_montecarlo, calculate_yearly_financials)
 from capex.visuals import (
     plot_npv_distribution,
     plot_boxplot,
@@ -261,74 +261,11 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-# SHOW AVERAGE RESULTS
-if st.session_state.results:
-    for r in st.session_state.results:
-        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        years = proj["years"]
-
-        # Preparo le liste delle voci
-        ricavi = np.zeros(years)
-        var_costs = np.zeros(years)
-        fixed_costs = np.array(proj.get("fixed_costs", [0]*years))
-        other_costs = np.zeros(years)
-        capex_init = np.zeros(years)
-        capex_rec = np.array(proj.get("capex_rec", [0]*years))
-        depreciation = np.array(proj.get("depreciation", [0]*years))
-        depreciation_0 = proj.get("depreciation_0", 0)
-        ammontare_dep0 = np.array([depreciation_0] + [0]*(years-1))
-
-        # --- Calcolo ricavi medi e costi ---
-        for year in range(years):
-            total_rev = 0
-            for rev in proj["revenues_list"]:
-                price = rev["price"][year]["p1"]  # media
-                quantity = rev["quantity"][year]["p1"]  # media
-                total_rev += price * quantity
-            ricavi[year] = total_rev
-
-            # Costi variabili sui ricavi
-            var_costs[year] = total_rev * proj["costs"]["var_pct"]
-
-            # Costi aggiuntivi medi
-            other_costs[year] = sum(cost["values"][year]["p1"] for cost in proj.get("other_costs", []))
-
-            # CAPEX iniziale solo anno 0
-            capex_init[year] = proj["capex"] if year == 0 else 0
-
-        # --- EBITDA, EBIT, NOPAT, FCF, DCF ---
-        ebitda = ricavi - var_costs - fixed_costs - other_costs
-        ebit = ebitda - depreciation - ammontare_dep0
-        taxes = np.where(ebit > 0, ebit * proj["tax"], -ebit * proj["tax"])  # se EBIT negativo, tasse diventano positive
-        nopat = ebit - taxes
-        fcf = nopat + depreciation + ammontare_dep0 - capex_rec - capex_init
-        dcf = fcf / ((1 + calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])) ** (np.arange(1, years+1)))
-
-        npv_medio = np.sum(dcf)
-
-        # --- Creazione tabella finale ---
-        df_financials = pd.DataFrame({
-            "Anno": np.arange(1, years+1),
-            "Ricavi": ricavi,
-            "Costi variabili": var_costs,
-            "Costi fissi": fixed_costs,
-            "Costi aggiuntivi": other_costs,
-            "CAPEX iniziale": capex_init,
-            "CAPEX ricorrente": capex_rec,
-            "Ammortamenti": ammontare_dep0 + depreciation,
-            "EBITDA": ebitda,
-            "EBIT": ebit,
-            "Tasse": taxes,
-            "NOPAT": nopat,
-            "FCF": fcf,
-            "DCF": dcf
-        })
-
-        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
-        st.dataframe(df_financials.style.format("{:.2f}"))
-        st.markdown(f"**NPV medio:** {npv_medio:.2f}")
-
-
+for proj in st.session_state.projects:
+    df_fin, npv_medio = calculate_yearly_financials(proj)
+    st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
+    st.dataframe(df_fin.style.format("{:.2f}"))
+    st.markdown(f"**NPV medio:** {npv_medio:.2f}")
 
 
 # ------------------ Matrice rischio-rendimento e GPT ------------------
@@ -438,6 +375,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
