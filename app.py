@@ -88,7 +88,7 @@ for i, proj in enumerate(st.session_state.projects):
                 # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
                     rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
-
+        
                 for y in range(proj["years"]):
                     st.markdown(f"Anno {y+1} - {key}")
                     dist_type = st.selectbox(
@@ -98,7 +98,7 @@ for i, proj in enumerate(st.session_state.projects):
                         key=f"{key}_dist_{i}_{j}_{y}"
                     )
                     rev[key][y]["dist"] = dist_type
-
+        
                     if dist_type == "Normale":
                         rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                         rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
@@ -112,7 +112,7 @@ for i, proj in enumerate(st.session_state.projects):
                     elif dist_type == "Uniforme":
                         rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                         rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-
+        
         # Pulsante per aggiungere nuova voce di ricavo
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
@@ -188,41 +188,34 @@ for i, proj in enumerate(st.session_state.projects):
                 "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
             })
 
-               # ------------------ Trend annuali ------------------
+        # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
+        
+        # Assicuriamoci che le liste abbiano almeno 'years' elementi
         proj.setdefault("price_growth", [0.0] * proj["years"])
         proj.setdefault("quantity_growth", [0.0] * proj["years"])
         
-        # Assicuriamoci che le liste abbiano esattamente 'years' elementi
-        if len(proj["price_growth"]) < proj["years"]:
-            proj["price_growth"] += [0.0] * (proj["years"] - len(proj["price_growth"]))
-        else:
-            proj["price_growth"] = proj["price_growth"][:proj["years"]]
+        while len(proj["price_growth"]) < proj["years"]:
+            proj["price_growth"].append(0.0)
+        while len(proj["quantity_growth"]) < proj["years"]:
+            proj["quantity_growth"].append(0.0)
         
-        if len(proj["quantity_growth"]) < proj["years"]:
-            proj["quantity_growth"] += [0.0] * (proj["years"] - len(proj["quantity_growth"]))
-        else:
-            proj["quantity_growth"] = proj["quantity_growth"][:proj["years"]]
-        
-        # Slider per ogni anno con chiavi univoche
         for t in range(proj["years"]):
             proj["price_growth"][t] = st.slider(
-                label=f"Crescita prezzo anno {t+1} (%)",
-                min_value=-0.5,
-                max_value=0.5,
-                value=proj["price_growth"][t],
-                step=0.05,
+                f"Crescita prezzo anno {t+1} (%)", 
+                -0.5, 0.5, 
+                proj["price_growth"][t], 
+                0.05, 
                 key=f"pg_{i}_{t}"
             )
             proj["quantity_growth"][t] = st.slider(
-                label=f"Crescita quantità anno {t+1} (%)",
-                min_value=-0.5,
-                max_value=0.5,
-                value=proj["quantity_growth"][t],
-                step=0.05,
+                f"Crescita quantità anno {t+1} (%)", 
+                -0.5, 0.5, 
+                proj["quantity_growth"][t], 
+                0.05, 
                 key=f"qg_{i}_{t}"
             )
-        
+
         # WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
@@ -300,7 +293,7 @@ if st.session_state.results:
     for r in st.session_state.results:
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
         df_financials, npv_medio = calculate_yearly_financials(proj)
-
+        
         st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
         st.dataframe(df_financials.style.format("{:.2f}"))
 
@@ -358,7 +351,7 @@ Fornisci un commento sintetico e professionale, evidenziando:
 if st.session_state.results:
     results = st.session_state.results
     output = io.BytesIO()
-
+    
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # --- Sheet riepilogo generale ---
         df_summary = pd.DataFrame([
@@ -413,5 +406,41 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
