@@ -2,6 +2,7 @@ import numpy as np
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
 import pandas as pd
+import numpy as np
 
 def run_montecarlo(proj, n_sim, wacc):
     """
@@ -19,21 +20,32 @@ def run_montecarlo(proj, n_sim, wacc):
     Returns:
         dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
     """
-    import numpy as np
 
     years = proj["years"]
+
+    # --- Inizializza liste se mancanti o troppo corte ---
+    proj.setdefault("capex_rec", [0.0]*years)
+    proj.setdefault("fixed_costs", [0.0]*years)
+    proj.setdefault("depreciation", [0.0]*years)
+    if "depreciation_0" not in proj:
+        proj["depreciation_0"] = proj.get("capex", 0.0) if years > 0 else 0.0
+
+    for key in ["capex_rec", "fixed_costs", "depreciation"]:
+        if len(proj[key]) < years:
+            proj[key] += [0.0]*(years - len(proj[key]))
+
     npv_array = np.zeros(n_sim)
-    yearly_dcf = np.zeros((n_sim, years))  # salviamo DCF attualizzati
+    yearly_dcf = np.zeros((n_sim, years))  # DCF attualizzati per anno
     pbp_array = np.zeros(n_sim)
 
     def calculate_fractional_pbp(discounted_cum_cf):
         """Interpolazione lineare per PBP frazionario"""
         negative_idx = np.where(discounted_cum_cf < 0)[0]
         if len(negative_idx) == 0:
-            return 1.0  # PBP < primo anno
+            return 1.0
         last_neg_idx = negative_idx[-1]
         if last_neg_idx == len(discounted_cum_cf) - 1:
-            return np.nan  # mai positivo
+            return np.nan
         cf_before = discounted_cum_cf[last_neg_idx]
         cf_after = discounted_cum_cf[last_neg_idx + 1]
         fraction = -cf_before / (cf_after - cf_before)
@@ -43,14 +55,13 @@ def run_montecarlo(proj, n_sim, wacc):
         dcf_per_year = []
 
         for year in range(years):
-            # CAPEX
-            # capex_init = proj["capex"] if year == 0 else 0
-            capex_rec = proj.get("capex_rec", [0]*years)[year]
+            # CAPEX ricorrente
+            capex_rec = proj["capex_rec"][year]
 
             # Costi fissi e ammortamenti
-            fixed_cost = proj.get("fixed_costs", [0]*years)[year]
-            depreciation = proj.get("depreciation", [0]*years)[year]
-            depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+            fixed_cost = proj["fixed_costs"][year]
+            depreciation = proj["depreciation"][year]
+            depreciation_0 = proj["depreciation_0"] if year == 0 else 0.0
             ammortamenti_tot = depreciation + depreciation_0
 
             # Ricavi stocastici
@@ -61,7 +72,9 @@ def run_montecarlo(proj, n_sim, wacc):
 
             # Costi variabili e aggiuntivi
             var_cost = total_revenue * proj["costs"]["var_pct"]
-            other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+            other_costs_total = sum(
+                sample(cost.get("values", None), year) for cost in proj.get("other_costs", [])
+            )
 
             # --- EBITDA ---
             ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
@@ -115,7 +128,7 @@ def run_montecarlo(proj, n_sim, wacc):
 
     return {
         "npv_array": npv_array,
-        "yearly_cash_flows": yearly_dcf,  # adesso contiene i DCF attualizzati
+        "yearly_cash_flows": yearly_dcf,
         "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": car_5pct,
@@ -127,6 +140,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
+
 
 
 # ------------------ Funzione sample per stocasticità ------------------
@@ -234,3 +248,4 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
