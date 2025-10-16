@@ -261,6 +261,76 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
+
+if st.session_state.results:
+    for r in st.session_state.results:
+        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
+        years = proj["years"]
+
+        # --- Tabelle basate sulle medie delle simulazioni ---
+        mean_cf = np.mean(r["yearly_cash_flows"], axis=0)  # FCF medio per anno
+
+        ricavi_mean = []
+        var_cost_mean = []
+        fixed_cost_mean = proj.get("fixed_costs", [0]*years)
+        other_cost_mean = []
+        depreciation_list = proj.get("depreciation", [0]*years)
+        depreciation_0 = proj.get("depreciation_0", 0)
+        ebit_list = []
+        taxes_mean = []
+        nopat_list = []
+        fcf_list = []
+        dcf_list = []
+
+        for year in range(years):
+            # Ricavi medi per anno (media simulazioni)
+            total_revenue = np.mean([
+                np.mean([
+                    sample(rev["price"], year) * sample(rev["quantity"], year)
+                    for _ in range(100)  # media stocastica veloce
+                ])
+                for rev in proj["revenues_list"]
+            ])
+            
+            var_cost = total_revenue * proj["costs"]["var_pct"]
+            other_costs_total = np.mean([
+                np.mean([sample(cost.get("values", None), year) for _ in range(100)])
+                for cost in proj.get("other_costs", [])
+            ])
+            
+            # EBIT = Ricavi - Costi Totali - Ammortamenti
+            ebit = total_revenue - var_cost - fixed_cost_mean[year] - other_costs_total - depreciation_list[year] - (depreciation_0 if year==0 else 0)
+            taxes = ebit * proj["tax"] if ebit > 0 else -ebit * proj["tax"]
+            nopat = ebit - taxes
+            fcf = nopat - (proj["capex"] if year==0 else 0) - proj.get("capex_rec", [0]*years)[year] + depreciation_list[year] + (depreciation_0 if year==0 else 0)
+            dcf = fcf / ((1 + wacc) ** (year + 1))
+
+            # Popola le liste
+            ricavi_mean.append(total_revenue)
+            var_cost_mean.append(var_cost + fixed_cost_mean[year] + other_costs_total)
+            ebit_list.append(ebit)
+            taxes_mean.append(taxes)
+            nopat_list.append(nopat)
+            fcf_list.append(fcf)
+            dcf_list.append(dcf)
+
+        df_summary = pd.DataFrame({
+            "Anno": range(1, years+1),
+            "Ricavi": ricavi_mean,
+            "Costi Totali": var_cost_mean,
+            "EBITDA": np.array(ricavi_mean) - np.array(var_cost_mean) + np.array(depreciation_list),
+            "EBIT": ebit_list,
+            "Tasse": taxes_mean,
+            "NOPAT": nopat_list,
+            "FCF": fcf_list,
+            "DCF": dcf_list,
+            "NPV cumulato medio": np.cumsum(dcf_list)
+        })
+
+        st.subheader(f"📊 Riepilogo per anno - {r['name']}")
+        st.dataframe(df_summary.style.format("{:.2f}"))
+
+
 # ------------------ Matrice rischio-rendimento e GPT ------------------
 if st.session_state.results:
     results = st.session_state.results
@@ -368,6 +438,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
