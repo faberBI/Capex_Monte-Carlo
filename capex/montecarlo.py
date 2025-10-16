@@ -78,20 +78,29 @@ def run_montecarlo(proj, n_sim, wacc):
         if not pbp_found:
             pbp_array[sim] = np.nan
 
+        # --- NPV ---
         discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
         npv_array[sim] = sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
     avg_discounted_pbp = np.nanmean(pbp_array)
 
-    # --- Percentili annuali ---
+    # --- Percentili annuali dei cash flow attualizzati ---
+    discount_factors = np.array([(1 + wacc) ** (t + 1) for t in range(years)])
+    cf_disc_matrix = yearly_cash_flows / discount_factors  # cash flow attualizzati
+    npv_cum_matrix = np.cumsum(cf_disc_matrix, axis=1)    # NPV cumulato anno per anno
+
     percentiles = [5, 25, 50, 75, 95]
-    yearly_percentiles = {
-        f"p{p}": np.percentile(yearly_cash_flows, p, axis=0).tolist()
-        for p in percentiles
+
+    yearly_cf_disc_percentiles = {
+        f"p{p}": np.percentile(cf_disc_matrix, p, axis=0).tolist() for p in percentiles
     }
 
-    # --- Percentili del Payback ---
+    yearly_npv_cum_percentiles = {
+        f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
+    }
+
+    # --- Percentili PBP ---
     pbp_percentiles = {
         f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles
     }
@@ -99,6 +108,8 @@ def run_montecarlo(proj, n_sim, wacc):
     return {
         "npv_array": npv_array,
         "yearly_cash_flows": yearly_cash_flows,
+        "cf_disc_matrix": cf_disc_matrix,
+        "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": np.percentile(npv_array, 5),
         "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)])
@@ -106,9 +117,12 @@ def run_montecarlo(proj, n_sim, wacc):
         "downside_prob": np.mean(npv_array < 0),
         "discounted_pbp": avg_discounted_pbp,
         "pbp_array": pbp_array,
-        "yearly_percentiles": yearly_percentiles,  # ✅ aggiunto
-        "pbp_percentiles": pbp_percentiles         # ✅ aggiunto
+        "yearly_cf_disc_percentiles": yearly_cf_disc_percentiles,
+        "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
+        "pbp_percentiles": pbp_percentiles
     }
+s
+
 
 
 
