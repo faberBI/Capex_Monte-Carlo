@@ -188,19 +188,23 @@ for i, proj in enumerate(st.session_state.projects):
                 "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
             })
 
-        # ------------------ Trend annuali ------------------
                # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
         proj.setdefault("price_growth", [0.0] * proj["years"])
         proj.setdefault("quantity_growth", [0.0] * proj["years"])
         
         # Assicuriamoci che le liste abbiano esattamente 'years' elementi
-        while len(proj["price_growth"]) < proj["years"]:
-            proj["price_growth"].append(0.0)
-        while len(proj["quantity_growth"]) < proj["years"]:
-            proj["quantity_growth"].append(0.0)
+        if len(proj["price_growth"]) < proj["years"]:
+            proj["price_growth"] += [0.0] * (proj["years"] - len(proj["price_growth"]))
+        else:
+            proj["price_growth"] = proj["price_growth"][:proj["years"]]
         
-        # Slider per ogni anno
+        if len(proj["quantity_growth"]) < proj["years"]:
+            proj["quantity_growth"] += [0.0] * (proj["years"] - len(proj["quantity_growth"]))
+        else:
+            proj["quantity_growth"] = proj["quantity_growth"][:proj["years"]]
+        
+        # Slider per ogni anno con chiavi univoche
         for t in range(proj["years"]):
             proj["price_growth"][t] = st.slider(
                 label=f"Crescita prezzo anno {t+1} (%)",
@@ -218,6 +222,7 @@ for i, proj in enumerate(st.session_state.projects):
                 step=0.05,
                 key=f"qg_{i}_{t}"
             )
+        
         # WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
@@ -408,4 +413,5 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
