@@ -3,20 +3,7 @@ from .costs import compute_costs
 from capex.wacc import calculate_wacc
 
 
-import numpy as np
-
 def run_montecarlo(proj, n_sim, wacc):
-    """
-    Esegue simulazioni Monte Carlo per un progetto CAPEX.
-    
-    Args:
-        proj (dict): progetto con tutte le informazioni (capex, revenues, costi, ammortamento, ecc.)
-        n_sim (int): numero di simulazioni
-        wacc (float): tasso di sconto WACC
-
-    Returns:
-        dict: risultati della simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
-    """
     years = proj["years"]
     npv_array = np.zeros(n_sim)
     yearly_cash_flows = np.zeros((n_sim, years))
@@ -47,8 +34,16 @@ def run_montecarlo(proj, n_sim, wacc):
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
 
-            # Cash flow anno corrente
-            cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec - depreciation - depreciation_0
+            # --- Calcolo EBIT ---
+            ebit = total_revenue - var_cost - fixed_cost - other_costs_total - depreciation - depreciation_0
+
+            # --- Tasse: se EBIT < 0 diventano positive ---
+            taxes = ebit * proj["tax"]
+            if ebit < 0:
+                taxes = -taxes  # beneficio fiscale
+
+            # --- Free Cash Flow ---
+            cf = ebit - taxes - capex_init - capex_rec + depreciation + depreciation_0
             cash_flows.append(cf)
 
             # Payback period attualizzato
@@ -106,6 +101,7 @@ def run_montecarlo(proj, n_sim, wacc):
     }
 
 
+
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
     """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
@@ -129,6 +125,7 @@ def sample(dist_obj, year_idx=None):
         return np.random.uniform(p1, p2)
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
+
 
 
 
