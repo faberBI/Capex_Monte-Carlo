@@ -299,8 +299,7 @@ if st.session_state.results:
         # --- EBITDA, EBIT, NOPAT, FCF, DCF ---
         ebitda = ricavi - var_costs - fixed_costs - other_costs
         ebit = ebitda - depreciation - ammontare_dep0
-        # Tasse: se EBIT negativo, le tasse diventano positive
-        taxes = np.where(ebit > 0, ebit * proj["tax"], -ebit * proj["tax"])
+        taxes = np.where(ebit > 0, ebit * proj["tax"], -ebit * proj["tax"])  # se EBIT negativo, tasse diventano positive
         nopat = ebit - taxes
         fcf = nopat + depreciation + ammontare_dep0 - capex_rec - capex_init
         dcf = fcf / ((1 + calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])) ** (np.arange(1, years+1)))
@@ -314,6 +313,8 @@ if st.session_state.results:
             "Costi variabili": var_costs,
             "Costi fissi": fixed_costs,
             "Costi aggiuntivi": other_costs,
+            "CAPEX iniziale": capex_init,
+            "CAPEX ricorrente": capex_rec,
             "Ammortamenti": ammontare_dep0 + depreciation,
             "EBITDA": ebitda,
             "EBIT": ebit,
@@ -437,6 +438,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
