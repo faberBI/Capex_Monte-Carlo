@@ -86,6 +86,7 @@ for i, proj in enumerate(st.session_state.projects):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
                 # ------------------ Ricavi multipli con distribuzione ------------------
+        # ------------------ Ricavi multipli con distribuzione ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
@@ -108,38 +109,44 @@ for i, proj in enumerate(st.session_state.projects):
                 # Ricavi stocastici anno per anno
                 for key in ["price", "quantity"]:
                     if key not in rev:
-                        rev[key] = [None] * proj["years"]
+                        rev[key] = []
         
-                    # Assicurati che ogni anno abbia un dizionario valido
+                    # Solo aggiungi dizionari mancanti senza sovrascrivere quelli esistenti
                     for y in range(proj["years"]):
-                        if rev[key][y] is None:
-                            rev[key][y] = {"dist": "Normale", "p1": 0.0, "p2": 0.0}
+                        if len(rev[key]) <= y or rev[key][y] is None:
+                            if len(rev[key]) <= y:
+                                rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
+                            else:
+                                rev[key][y] = {"dist": "Normale", "p1": 0.0, "p2": 0.0}
         
+                        year_data = rev[key][y]
                         st.markdown(f"Anno {y+1} - {key}")
                         dist_type = st.selectbox(
                             "Distribuzione",
                             ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
+                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(year_data.get("dist", "Normale")),
                             key=f"{key}_dist_{i}_{j}_{y}"
                         )
-                        rev[key][y]["dist"] = dist_type
+                        year_data["dist"] = dist_type
         
                         if dist_type == "Normale":
-                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Std Dev (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y].pop("p3", None)
+                            year_data["p1"] = st.number_input("Media (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            year_data["p2"] = st.number_input("Std Dev (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            year_data.pop("p3", None)
                         elif dist_type == "Triangolare":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
+                            year_data["p1"] = st.number_input("Minimo (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            year_data["p2"] = st.number_input("Modal (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            year_data["p3"] = st.number_input("Massimo (p3)", value=year_data.get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
                         elif dist_type == "Lognormale":
-                            rev[key][y]["p1"] = st.number_input("Mu (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Sigma (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y].pop("p3", None)
+                            year_data["p1"] = st.number_input("Mu (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            year_data["p2"] = st.number_input("Sigma (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            year_data.pop("p3", None)
                         elif dist_type == "Uniforme":
-                            rev[key][y]["p1"] = st.number_input("Min (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Max (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y].pop("p3", None)
+                            year_data["p1"] = st.number_input("Min (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            year_data["p2"] = st.number_input("Max (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                    year_data.pop("p3", None)
+
+
         
         # Pulsante per aggiungere una nuova voce di ricavo
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
@@ -418,6 +425,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
