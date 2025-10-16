@@ -1,7 +1,7 @@
 import numpy as np
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
-
+import pandas as pd
 
 def run_montecarlo(proj, n_sim, wacc):
     """
@@ -231,6 +231,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
