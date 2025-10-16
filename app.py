@@ -264,44 +264,69 @@ if st.button("▶️ Avvia simulazioni"):
 # SHOW AVERAGE RESULTS
 if st.session_state.results:
     for r in st.session_state.results:
-        years = r["yearly_cash_flows"].shape[1]
-
-        # --- Prendiamo la media dei FCF dalle simulazioni ---
-        fcf_mean = np.mean(r["yearly_cash_flows"], axis=0)
-
-        # --- Per calcolare retroattivamente Ricavi, Costi, EBIT, NOPAT ---
-        # Qui approssimiamo: Costi Totali = Ricavi - FCF + Ammortamenti + CAPEX
-        ricavi_mean = []
-        var_cost_mean = []
-        depreciation_0_list = []
-        depreciation_list = []
-
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        capex_rec_list = proj.get("capex_rec", [0]*years)
-        fixed_cost_list = proj.get("fixed_costs", [0]*years)
-        depreciation_list = proj.get("depreciation", [0]*years)
+        years = proj["years"]
+
+        # Preparo le liste delle voci
+        ricavi = np.zeros(years)
+        var_costs = np.zeros(years)
+        fixed_costs = np.array(proj.get("fixed_costs", [0]*years))
+        other_costs = np.zeros(years)
+        capex_init = np.zeros(years)
+        capex_rec = np.array(proj.get("capex_rec", [0]*years))
+        depreciation = np.array(proj.get("depreciation", [0]*years))
         depreciation_0 = proj.get("depreciation_0", 0)
+        ammontare_dep0 = np.array([depreciation_0] + [0]*(years-1))
 
+        # --- Calcolo ricavi medi e costi ---
         for year in range(years):
-            # ricavi medi anno = EBITDA + costi + ammortamenti
-            total_cf = fcf_mean[year]
-            dep = depreciation_list[year] + (depreciation_0 if year==0 else 0)
-            capex_total = (proj["capex"] if year==0 else 0) + capex_rec_list[year]
-            ebit = total_cf + capex_total + dep  # retrocalcolo
-            taxes = ebit * proj["tax"] if ebit > 0 else -ebit * proj["tax"]
-            nopat = ebit - taxes
-            ricavi_mean.append(ebit + taxes + var_cost_mean[year-1] if year>0 else ebit + taxes)  # approssimazione
-            var_cost_mean.append(ricavi_mean[-1] - ebit)  # costi = ricavi - EBIT
-            depreciation_0_list.append(depreciation_0 if year==0 else 0)
+            total_rev = 0
+            for rev in proj["revenues_list"]:
+                price = rev["price"][year]["p1"]  # media
+                quantity = rev["quantity"][year]["p1"]  # media
+                total_rev += price * quantity
+            ricavi[year] = total_rev
 
-        df_summary = pd.DataFrame({
-            "Anno": range(1, years+1),
-            "FCF medio": fcf_mean,
-            "NPV cumulato medio": np.cumsum(fcf_mean)
+            # Costi variabili sui ricavi
+            var_costs[year] = total_rev * proj["costs"]["var_pct"]
+
+            # Costi aggiuntivi medi
+            other_costs[year] = sum(cost["values"][year]["p1"] for cost in proj.get("other_costs", []))
+
+            # CAPEX iniziale solo anno 0
+            capex_init[year] = proj["capex"] if year == 0 else 0
+
+        # --- EBITDA, EBIT, NOPAT, FCF, DCF ---
+        ebitda = ricavi - var_costs - fixed_costs - other_costs
+        ebit = ebitda - depreciation - ammontare_dep0
+        # Tasse: se EBIT negativo, le tasse diventano positive
+        taxes = np.where(ebit > 0, ebit * proj["tax"], -ebit * proj["tax"])
+        nopat = ebit - taxes
+        fcf = nopat + depreciation + ammontare_dep0 - capex_rec - capex_init
+        dcf = fcf / ((1 + calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])) ** (np.arange(1, years+1)))
+
+        npv_medio = np.sum(dcf)
+
+        # --- Creazione tabella finale ---
+        df_financials = pd.DataFrame({
+            "Anno": np.arange(1, years+1),
+            "Ricavi": ricavi,
+            "Costi variabili": var_costs,
+            "Costi fissi": fixed_costs,
+            "Costi aggiuntivi": other_costs,
+            "Ammortamenti": ammontare_dep0 + depreciation,
+            "EBITDA": ebitda,
+            "EBIT": ebit,
+            "Tasse": taxes,
+            "NOPAT": nopat,
+            "FCF": fcf,
+            "DCF": dcf
         })
 
-        st.subheader(f"📊 Riepilogo FCF per anno - {r['name']}")
-        st.dataframe(df_summary.style.format("{:.2f}"))
+        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
+        st.dataframe(df_financials.style.format("{:.2f}"))
+        st.markdown(f"**NPV medio:** {npv_medio:.2f}")
+
 
 
 
@@ -412,6 +437,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
