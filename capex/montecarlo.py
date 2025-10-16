@@ -50,8 +50,8 @@ def run_montecarlo(proj, n_sim, wacc):
             # Costi fissi e ammortamenti
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
             depreciation = proj.get("depreciation", [0]*years)[year]
-            depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
-            ammortamenti_tot = depreciation + depreciation_0
+            # depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+            ammortamenti_tot = depreciation #+ depreciation_0
 
             # Ricavi stocastici
             total_revenue = sum(
@@ -232,6 +232,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
