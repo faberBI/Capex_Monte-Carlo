@@ -17,15 +17,18 @@ def run_montecarlo(proj, n_sim, wacc):
         wacc (float): tasso di sconto WACC
 
     Returns:
-        dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
+        dict: risultati simulazione con npv_array, yearly_cash_flows,
+              percentili, npv cumulato e PBP
     """
+    import numpy as np
+
     years = proj["years"]
     npv_array = np.zeros(n_sim)
     yearly_cash_flows = np.zeros((n_sim, years))
     pbp_array = np.zeros(n_sim)
 
     def calculate_fractional_pbp(discounted_cum_cf):
-        """Interpolazione lineare per PBP frazionario"""
+        """Interpolazione lineare per Payback Period frazionario"""
         negative_idx = np.where(discounted_cum_cf < 0)[0]
         if len(negative_idx) == 0:
             return 1.0  # PBP < primo anno
@@ -39,15 +42,14 @@ def run_montecarlo(proj, n_sim, wacc):
 
     for sim in range(n_sim):
         cash_flows = []
-        discounted_cf_cum = 0
 
         for year in range(years):
-            # CAPEX
+            # --- CAPEX ---
             capex_init = proj["capex"] if year == 0 else 0
             capex_rec_list = proj.get("capex_rec") or [0] * years
             capex_rec = capex_rec_list[year]
 
-            # Costi fissi e ammortamenti
+            # --- Costi fissi e ammortamenti ---
             fixed_costs_list = proj.get("fixed_costs") or [0] * years
             fixed_cost = fixed_costs_list[year]
             depreciation_list = proj.get("depreciation") or [0] * years
@@ -55,57 +57,65 @@ def run_montecarlo(proj, n_sim, wacc):
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
 
-            # Ricavi stocastici
+            # --- Ricavi stocastici ---
             total_revenue = sum(
                 sample(rev["price"], year) * sample(rev["quantity"], year)
                 for rev in proj["revenues_list"]
             )
 
-            # Costi variabili e aggiuntivi
+            # --- Costi variabili e aggiuntivi ---
             var_cost = total_revenue * proj["costs"]["var_pct"]
-            other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+            other_costs_total = sum(sample(cost.get("values", None), year)
+                                    for cost in proj.get("other_costs", []))
 
-            # --- Calcolo EBITDA ---
+            # --- EBITDA e EBIT ---
             ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
-
-            # --- Calcolo EBIT ---
             ebit = ebitda - ammortamenti_tot
 
             # --- Tasse ---
-            taxes = -ebit * proj["tax"]  # uscita positiva se EBIT>0, beneficio se EBIT<0
+            taxes = -ebit * proj["tax"]  # uscita se EBIT>0
             if ebit < 0:
-                taxes = -taxes  # beneficio fiscale positivo
+                taxes = -taxes  # beneficio se EBIT<0
 
             # --- Free Cash Flow ---
             fcf = ebitda + taxes - capex_init - capex_rec
             cash_flows.append(fcf)
 
-        # --- PBP frazionario ---
-        discounted_cum_cf = np.cumsum([cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(cash_flows)])
-        pbp_array[sim] = calculate_fractional_pbp(discounted_cum_cf)
+        # --- Calcolo DCF per anno (scontati) ---
+        discounted_cf = [cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(cash_flows)]
 
         # --- NPV totale ---
-        discounted_cf = [cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(cash_flows)]
         npv_array[sim] = sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
+        # --- Payback period frazionario ---
+        discounted_cum_cf = np.cumsum(discounted_cf)
+        pbp_array[sim] = calculate_fractional_pbp(discounted_cum_cf)
+
     avg_discounted_pbp = np.nanmean(pbp_array)
 
-    # --- Percentili annuali cash flow ---
+    # --- Percentili annuali dei FCF (non scontati) ---
     percentiles = [5, 25, 50, 75, 95]
     yearly_cashflow_percentiles = {
         f"p{p}": np.percentile(yearly_cash_flows, p, axis=0).tolist()
         for p in percentiles
     }
 
-    # --- NPV cumulato e percentili ---
-    npv_cum_matrix = np.cumsum(yearly_cash_flows, axis=1)
+    # --- NPV cumulato SCONTATO (corretto) ---
+    # prima calcolo tutti i flussi scontati per simulazione
+    discounted_cf_matrix = np.array([
+        [cf / ((1 + wacc) ** (y + 1)) for y, cf in enumerate(sim_flows)]
+        for sim_flows in yearly_cash_flows
+    ])
+    npv_cum_matrix = np.cumsum(discounted_cf_matrix, axis=1)
+
+    # percentili corretti del NPV cumulato
     yearly_npv_cum_percentiles = {
         f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist()
         for p in percentiles
     }
 
-    # --- Percentili Payback ---
+    # --- Percentili del Payback ---
     pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
     # --- Calcolo CVaR ---
@@ -115,6 +125,7 @@ def run_montecarlo(proj, n_sim, wacc):
     return {
         "npv_array": npv_array,
         "yearly_cash_flows": yearly_cash_flows,
+        "discounted_cf_matrix": discounted_cf_matrix,
         "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": car_5pct,
@@ -126,6 +137,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
+
 
 
 
@@ -236,6 +248,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
