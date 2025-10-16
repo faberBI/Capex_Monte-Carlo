@@ -55,7 +55,7 @@ def add_project():
 # ------------------ UI ------------------
 st.title("📊 CAPEX @Risk Framework by ERM")
 st.button("➕ Aggiungi progetto", on_click=add_project)
-n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000)
+n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000,  step=5000)
 
 # ------------------ Loop progetti ------------------
 for i, proj in enumerate(st.session_state.projects):
@@ -368,6 +368,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
