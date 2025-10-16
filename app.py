@@ -125,6 +125,27 @@ for i, proj in enumerate(st.session_state.projects):
         for y in range(proj["years"]):
             proj["fixed_costs"][y] = st.number_input(f"Costi fissi anno {y+1}", value=proj["fixed_costs"][y], key=f"fixed_{i}_{y}")
 
+        # ------------------ Ammortamento ------------------
+        st.subheader("🏗️ Ammortamento (Depreciation)")
+
+        # Ammortamento iniziale anno 0
+        if "depreciation_0" not in proj:
+            proj["depreciation_0"] = proj["capex"]/proj["years"]  # default proporzionale al CAPEX
+
+        proj["depreciation_0"] = st.number_input(
+        f"Ammortamento anno 0 (iniziale) progetto {proj['name']}",
+        value=proj["depreciation_0"],
+        key=f"dep0_{i}"
+        )
+
+        # Ammortamento anno per anno
+        if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
+            proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
+
+        df_dep = pd.DataFrame({"Anno": range(1, proj["years"]+1), "Ammortamento": proj["depreciation"]})
+        df_dep_edit = st.data_editor(df_dep, key=f"dep_{i}", num_rows="dynamic")
+        proj["depreciation"] = df_dep_edit["Ammortamento"].tolist()
+
         # ------------------ Costi aggiuntivi stocastici ------------------
         st.subheader("📉 Costi aggiuntivi")
         proj.setdefault("other_costs", [])
@@ -159,14 +180,6 @@ for i, proj in enumerate(st.session_state.projects):
                 "name": f"Costo {len(proj['other_costs'])+1}",
                 "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
             })
-
-        # ------------------ Ammortamento ------------------
-        st.subheader("🏗️ Ammortamento (Depreciation)")
-        if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
-            proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
-        df_dep = pd.DataFrame({"Anno": range(1, proj["years"]+1), "Ammortamento": proj["depreciation"]})
-        df_dep_edit = st.data_editor(df_dep, key=f"dep_{i}", num_rows="dynamic")
-        proj["depreciation"] = df_dep_edit["Ammortamento"].tolist()
 
         # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
@@ -355,6 +368,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
