@@ -10,12 +10,12 @@ def run_montecarlo(proj, n_sim, wacc):
     EBIT = EBITDA - Ammortamenti
     Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
     FCF = EBITDA + Tasse - CAPEX
-    
+
     Args:
         proj (dict): progetto con informazioni (capex, revenues, costi, ammortamenti, ecc.)
         n_sim (int): numero simulazioni
         wacc (float): tasso di sconto WACC
-    
+
     Returns:
         dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
     """
@@ -26,9 +26,8 @@ def run_montecarlo(proj, n_sim, wacc):
 
     for sim in range(n_sim):
         cash_flows = []
-        discounted_cf_cum = 0
-        pbp_found = False
 
+        # --- Calcolo FCF anno per anno ---
         for year in range(years):
             # CAPEX
             capex_init = proj["capex"] if year == 0 else 0
@@ -53,34 +52,33 @@ def run_montecarlo(proj, n_sim, wacc):
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
 
-            # --- Calcolo EBITDA ---
+            # --- EBITDA ---
             ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
 
-            # --- Calcolo EBIT ---
+            # --- EBIT ---
             ebit = ebitda - ammortamenti_tot
 
             # --- Tasse ---
-            if ebit >= 0:
-                taxes = -ebit * proj["tax"]  # uscita di cassa
-            else:
-                taxes = -ebit * proj["tax"]  # beneficio fiscale positivo
+            taxes = -ebit * proj["tax"]  # esce negativa se EBIT positivo, positiva se EBIT negativo
+            if ebit < 0:
+                taxes = -taxes  # beneficio fiscale positivo
 
             # --- Free Cash Flow ---
             fcf = ebitda + taxes - capex_init - capex_rec
             cash_flows.append(fcf)
 
-            # Payback period attualizzato
-            discounted_cf_cum += fcf / ((1 + wacc) ** (year + 1))
-            if not pbp_found and discounted_cf_cum >= 0:
-                pbp_array[sim] = year + 1
-                pbp_found = True
+        cash_flows = np.array(cash_flows)
 
-        if not pbp_found:
+        # --- Payback period attualizzato ---
+        discounted_cum_cf = np.cumsum(cash_flows / ((1 + wacc) ** np.arange(1, years + 1)))
+        if np.all(discounted_cum_cf < 0):
             pbp_array[sim] = np.nan
+        else:
+            pbp_array[sim] = np.argmax(discounted_cum_cf >= 0) + 1
 
-        # NPV totale
-        discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
-        npv_array[sim] = sum(discounted_cf)
+        # --- NPV ---
+        discounted_cf = cash_flows / ((1 + wacc) ** np.arange(1, years + 1))
+        npv_array[sim] = np.sum(discounted_cf)
         yearly_cash_flows[sim, :] = cash_flows
 
     avg_discounted_pbp = np.nanmean(pbp_array)
@@ -231,6 +229,7 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
 
 
 
