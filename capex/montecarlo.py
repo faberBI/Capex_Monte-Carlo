@@ -40,11 +40,16 @@ def sample(dist_obj, year_idx=None):
 
 import numpy as np
 
+import numpy as np
+
 def run_montecarlo(proj, n_sim, wacc):
     years = proj["years"]
     npv_array = np.zeros(n_sim)
     yearly_cash_flows = np.zeros((n_sim, years))
     pbp_array = np.zeros(n_sim)
+    
+    # Per salvare i cash flow cumulati attualizzati per tutte le simulazioni
+    npv_cum_matrix = np.zeros((n_sim, years))
 
     for sim in range(n_sim):
         cash_flows = []
@@ -60,16 +65,21 @@ def run_montecarlo(proj, n_sim, wacc):
             depreciation_list = proj.get("depreciation") or [0] * years
             depreciation = depreciation_list[year]
 
+            # Ricavi stocastici
             total_revenue = sum(
                 sample(rev["price"], year) * sample(rev["quantity"], year)
                 for rev in proj["revenues_list"]
             )
 
+            # Costi variabili e aggiuntivi
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+
+            # Cash flow netto
             cf = total_revenue - var_cost - fixed_cost - other_costs_total - capex_init - capex_rec
             cash_flows.append(cf)
 
+            # Payback period attualizzato
             discounted_cf_cum += cf / ((1 + wacc) ** (year + 1))
             if not pbp_found and discounted_cf_cum >= 0:
                 pbp_array[sim] = year + 1
@@ -78,50 +88,45 @@ def run_montecarlo(proj, n_sim, wacc):
         if not pbp_found:
             pbp_array[sim] = np.nan
 
-        # --- NPV ---
+        # NPV totale della simulazione
         discounted_cf = [cf / ((1 + wacc) ** (year + 1)) for year, cf in enumerate(cash_flows)]
         npv_array[sim] = sum(discounted_cf)
+
+        # Salvo cash flow annuali
         yearly_cash_flows[sim, :] = cash_flows
+
+        # NPV cumulato per anno
+        npv_cum_matrix[sim, :] = np.cumsum(discounted_cf)
 
     avg_discounted_pbp = np.nanmean(pbp_array)
 
-    # --- Percentili annuali dei cash flow attualizzati ---
-    discount_factors = np.array([(1 + wacc) ** (t + 1) for t in range(years)])
-    cf_disc_matrix = yearly_cash_flows / discount_factors  # cash flow attualizzati
-    npv_cum_matrix = np.cumsum(cf_disc_matrix, axis=1)    # NPV cumulato anno per anno
-
+    # Percentili annuali dei cash flow
     percentiles = [5, 25, 50, 75, 95]
+    yearly_percentiles = {f"p{p}": np.percentile(yearly_cash_flows, p, axis=0).tolist() for p in percentiles}
 
-    yearly_cf_disc_percentiles = {
-        f"p{p}": np.percentile(cf_disc_matrix, p, axis=0).tolist() for p in percentiles
-    }
+    # Percentili cumulati attualizzati (NPV cumulato)
+    yearly_cf_disc_percentiles = {f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles}
 
-    yearly_npv_cum_percentiles = {
-        f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
-    }
-
-    # --- Percentili PBP ---
-    pbp_percentiles = {
-        f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles
-    }
+    # Percentili del payback
+    pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
     return {
         "npv_array": npv_array,
         "yearly_cash_flows": yearly_cash_flows,
-        "cf_disc_matrix": cf_disc_matrix,
         "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": np.percentile(npv_array, 5),
-        "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)])
-                 if np.any(npv_array <= np.percentile(npv_array, 5)) else np.percentile(npv_array, 5),
+        "cvar": np.mean(npv_array[npv_array <= np.percentile(npv_array, 5)]) 
+                if np.any(npv_array <= np.percentile(npv_array, 5)) else np.percentile(npv_array, 5),
         "downside_prob": np.mean(npv_array < 0),
         "discounted_pbp": avg_discounted_pbp,
         "pbp_array": pbp_array,
-        "yearly_cf_disc_percentiles": yearly_cf_disc_percentiles,
-        "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
-        "pbp_percentiles": pbp_percentiles
+        "pbp_percentiles": pbp_percentiles,
+        "yearly_percentiles": yearly_percentiles,
+        "yearly_cf_disc_percentiles": yearly_cf_disc_percentiles
     }
 s
+
 
 
 
