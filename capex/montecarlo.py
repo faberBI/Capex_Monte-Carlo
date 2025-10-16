@@ -4,6 +4,21 @@ from capex.wacc import calculate_wacc
 
 
 def run_montecarlo(proj, n_sim, wacc):
+    """
+    Esegue simulazioni Monte Carlo per un progetto CAPEX secondo la logica:
+    EBITDA = Ricavi - Costi
+    EBIT = EBITDA - Ammortamenti
+    Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
+    FCF = EBITDA + Tasse - CAPEX
+    
+    Args:
+        proj (dict): progetto con informazioni (capex, revenues, costi, ammortamenti, ecc.)
+        n_sim (int): numero simulazioni
+        wacc (float): tasso di sconto WACC
+    
+    Returns:
+        dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
+    """
     years = proj["years"]
     npv_array = np.zeros(n_sim)
     yearly_cash_flows = np.zeros((n_sim, years))
@@ -15,16 +30,20 @@ def run_montecarlo(proj, n_sim, wacc):
         pbp_found = False
 
         for year in range(years):
+            # CAPEX
             capex_init = proj["capex"] if year == 0 else 0
             capex_rec_list = proj.get("capex_rec") or [0] * years
             capex_rec = capex_rec_list[year]
+
+            # Costi fissi e ammortamenti
             fixed_costs_list = proj.get("fixed_costs") or [0] * years
             fixed_cost = fixed_costs_list[year]
             depreciation_list = proj.get("depreciation") or [0] * years
             depreciation = depreciation_list[year]
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+            ammortamenti_tot = depreciation + depreciation_0
 
-            # Ricavi totali stocastici
+            # Ricavi stocastici
             total_revenue = sum(
                 sample(rev["price"], year) * sample(rev["quantity"], year)
                 for rev in proj["revenues_list"]
@@ -34,20 +53,24 @@ def run_montecarlo(proj, n_sim, wacc):
             var_cost = total_revenue * proj["costs"]["var_pct"]
             other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
 
-            # --- Calcolo EBIT ---
-            ebit = total_revenue - var_cost - fixed_cost - other_costs_total - depreciation - depreciation_0
+            # --- Calcolo EBITDA ---
+            ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
 
-            # --- Tasse: se EBIT < 0 diventano positive ---
-            taxes = ebit * proj["tax"]
-            if ebit < 0:
-                taxes = -taxes  # beneficio fiscale
+            # --- Calcolo EBIT ---
+            ebit = ebitda - ammortamenti_tot
+
+            # --- Tasse ---
+            if ebit >= 0:
+                taxes = -ebit * proj["tax"]  # uscita di cassa
+            else:
+                taxes = -ebit * proj["tax"]  # beneficio fiscale positivo
 
             # --- Free Cash Flow ---
-            cf = ebit - taxes - capex_init - capex_rec + depreciation + depreciation_0
-            cash_flows.append(cf)
+            fcf = ebitda + taxes - capex_init - capex_rec
+            cash_flows.append(fcf)
 
             # Payback period attualizzato
-            discounted_cf_cum += cf / ((1 + wacc) ** (year + 1))
+            discounted_cf_cum += fcf / ((1 + wacc) ** (year + 1))
             if not pbp_found and discounted_cf_cum >= 0:
                 pbp_array[sim] = year + 1
                 pbp_found = True
@@ -102,6 +125,7 @@ def run_montecarlo(proj, n_sim, wacc):
 
 
 
+
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
     """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
@@ -125,6 +149,7 @@ def sample(dist_obj, year_idx=None):
         return np.random.uniform(p1, p2)
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
+
 
 
 
