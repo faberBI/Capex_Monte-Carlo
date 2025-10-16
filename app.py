@@ -88,7 +88,7 @@ for i, proj in enumerate(st.session_state.projects):
                 # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
                     rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
-        
+
                 for y in range(proj["years"]):
                     st.markdown(f"Anno {y+1} - {key}")
                     dist_type = st.selectbox(
@@ -98,7 +98,7 @@ for i, proj in enumerate(st.session_state.projects):
                         key=f"{key}_dist_{i}_{j}_{y}"
                     )
                     rev[key][y]["dist"] = dist_type
-        
+
                     if dist_type == "Normale":
                         rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                         rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
@@ -112,7 +112,7 @@ for i, proj in enumerate(st.session_state.projects):
                     elif dist_type == "Uniforme":
                         rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                         rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-        
+
         # Pulsante per aggiungere nuova voce di ricavo
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
@@ -190,6 +190,8 @@ for i, proj in enumerate(st.session_state.projects):
 
         # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
+        proj.setdefault("price_growth", [0.0]*proj["years"])
+        proj.setdefault("quantity_growth", [0.0]*proj["years"])
         
         # Assicuriamoci che le liste abbiano almeno 'years' elementi
         proj.setdefault("price_growth", [0.0] * proj["years"])
@@ -201,6 +203,8 @@ for i, proj in enumerate(st.session_state.projects):
             proj["quantity_growth"].append(0.0)
         
         for t in range(proj["years"]):
+            proj["price_growth"][t] = st.slider(f"Crescita prezzo anno {t+1} (%)", -0.5, 0.5, proj["price_growth"][t], 0.05, key=f"pg_{i}_{t}")
+            proj["quantity_growth"][t] = st.slider(f"Crescita quantità anno {t+1} (%)", -0.5, 0.5, proj["quantity_growth"][t], 0.05, key=f"qg_{i}_{t}")
             proj["price_growth"][t] = st.slider(
                 f"Crescita prezzo anno {t+1} (%)", 
                 -0.5, 0.5, 
@@ -293,7 +297,7 @@ if st.session_state.results:
     for r in st.session_state.results:
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
         df_financials, npv_medio = calculate_yearly_financials(proj)
-        
+
         st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
         st.dataframe(df_financials.style.format("{:.2f}"))
 
@@ -351,7 +355,7 @@ Fornisci un commento sintetico e professionale, evidenziando:
 if st.session_state.results:
     results = st.session_state.results
     output = io.BytesIO()
-    
+
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # --- Sheet riepilogo generale ---
         df_summary = pd.DataFrame([
