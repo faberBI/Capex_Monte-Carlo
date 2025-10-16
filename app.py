@@ -261,11 +261,15 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-for proj in st.session_state.projects:
-    df_fin, npv_medio = calculate_yearly_financials(proj)
-    st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
-    st.dataframe(df_fin.style.format("{:.2f}"))
-    st.markdown(f"**NPV medio:** {npv_medio:.2f}")
+if st.session_state.results:
+    for r in st.session_state.results:
+        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
+        df_financials, npv_medio = calculate_yearly_financials(proj)
+        
+        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
+        st.dataframe(df_financials.style.format("{:.2f}"))
+        st.markdown(f"**NPV medio:** {npv_medio:.2f}")
+
 
 
 # ------------------ Matrice rischio-rendimento e GPT ------------------
@@ -375,6 +379,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
