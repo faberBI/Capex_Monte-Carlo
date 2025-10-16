@@ -84,34 +84,41 @@ for i, proj in enumerate(st.session_state.projects):
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
-            for key in ["price","quantity"]:
+            for key in ["price", "quantity"]:
+                # Assicuriamoci che la lista abbia almeno 'years' elementi
+                while len(rev[key]) < proj["years"]:
+                    rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
+        
                 for y in range(proj["years"]):
                     st.markdown(f"Anno {y+1} - {key}")
                     dist_type = st.selectbox(
                         "Distribuzione",
-                        ["Normale","Triangolare","Lognormale","Uniforme"],
-                        index=["Normale","Triangolare","Lognormale","Uniforme"].index(rev[key][y]["dist"]),
+                        ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                        index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
                         key=f"{key}_dist_{i}_{j}_{y}"
                     )
                     rev[key][y]["dist"] = dist_type
+        
                     if dist_type == "Normale":
-                        rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                     elif dist_type == "Triangolare":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3",0.0), key=f"{key}_p3_{i}_{j}_{y}")
+                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
                     elif dist_type == "Lognormale":
-                        rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                     elif dist_type == "Uniforme":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1",0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2",0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                        rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+        
+        # Pulsante per aggiungere nuova voce di ricavo
         if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
             proj["revenues_list"].append({
-                "name": f"Ricavo {len(proj['revenues_list'])+1}",
-                "price": [{"dist":"Normale","p1":100.0,"p2":10.0} for _ in range(proj["years"])],
-                "quantity": [{"dist":"Normale","p1":1000.0,"p2":100.0} for _ in range(proj["years"])]
+                "name": f"Ricavo {len(proj['revenues_list']) + 1}",
+                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0} for _ in range(proj["years"])],
+                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(proj["years"])]
             })
 
         # ------------------ Costi Variabili ------------------
@@ -379,6 +386,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
