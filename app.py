@@ -85,8 +85,8 @@ for i, proj in enumerate(st.session_state.projects):
             for y in range(proj["years"]):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
-                # ------------------ Ricavi multipli con distribuzione ------------------
-        # ------------------ Ricavi multipli con distribuzione ------------------
+
+ # ------------------ Ricavi multipli con distribuzione ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
@@ -106,20 +106,18 @@ for i, proj in enumerate(st.session_state.projects):
                     key=f"rev_value_{i}_{j}"
                 )
             else:
-                # Ricavi stocastici anno per anno
                 for key in ["price", "quantity"]:
                     if key not in rev:
-                        rev[key] = []
-        
-                    # Solo aggiungi dizionari mancanti senza sovrascrivere quelli esistenti
+                        rev[key] = [None]*proj["years"]
+            
+                    # Renderizza solo gli anni stocastici: ignoriamo quelli deterministici già impostati
                     for y in range(proj["years"]):
-                        if len(rev[key]) <= y or rev[key][y] is None:
-                            if len(rev[key]) <= y:
-                                rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
-                            else:
-                                rev[key][y] = {"dist": "Normale", "p1": 0.0, "p2": 0.0}
-        
+                        # Se il dizionario per quest'anno non esiste ancora, lo creo
+                        if rev[key][y] is None:
+                            rev[key][y] = {"dist": "Normale", "p1": 0.0, "p2": 0.0}
+            
                         year_data = rev[key][y]
+                        
                         st.markdown(f"Anno {y+1} - {key}")
                         dist_type = st.selectbox(
                             "Distribuzione",
@@ -128,7 +126,8 @@ for i, proj in enumerate(st.session_state.projects):
                             key=f"{key}_dist_{i}_{j}_{y}"
                         )
                         year_data["dist"] = dist_type
-        
+                    
+                        # Input parametri distribuzione
                         if dist_type == "Normale":
                             year_data["p1"] = st.number_input("Media (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                             year_data["p2"] = st.number_input("Std Dev (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
@@ -144,8 +143,8 @@ for i, proj in enumerate(st.session_state.projects):
                         elif dist_type == "Uniforme":
                             year_data["p1"] = st.number_input("Min (p1)", value=year_data.get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                             year_data["p2"] = st.number_input("Max (p2)", value=year_data.get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    year_data.pop("p3", None)
-
+                            year_data.pop("p3", None)
+                    
 
         
         # Pulsante per aggiungere una nuova voce di ricavo
@@ -425,6 +424,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
