@@ -125,7 +125,8 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_percentiles": yearly_percentiles,
         "yearly_cf_disc_percentiles": yearly_cf_disc_percentiles
     }
-s
+
+
 
 
 
