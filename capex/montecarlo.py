@@ -168,20 +168,20 @@ def calculate_yearly_financials(proj):
     for year in range(years):
         total_revenue = 0.0
         for rev in proj.get("revenues_list", []):
-            price_obj = rev["price"][year] if year < len(rev["price"]) else {"type": "deterministico", "value": 0.0}
-            quantity_obj = rev["quantity"][year] if year < len(rev["quantity"]) else {"type": "deterministico", "value": 0.0}
+            price_obj = rev["price"][year] if year < len(rev["price"]) else {"is_stochastic": True, "p1":0,"p2":0}
+            quantity_obj = rev["quantity"][year] if year < len(rev["quantity"]) else {"is_stochastic": True, "p1":0,"p2":0}
 
-            # prezzo
-            if price_obj.get("type", "stocastico") == "deterministico":
-                price_val = price_obj.get("value", 0.0)
-            else:
+            # Prezzo
+            if price_obj.get("is_stochastic", True):
                 price_val = sample(price_obj, year)
-
-            # quantità
-            if quantity_obj.get("type", "stocastico") == "deterministico":
-                quantity_val = quantity_obj.get("value", 0.0)
             else:
+                price_val = price_obj.get("value", 0.0)
+
+            # Quantità
+            if quantity_obj.get("is_stochastic", True):
                 quantity_val = sample(quantity_obj, year)
+            else:
+                quantity_val = quantity_obj.get("value", 0.0)
 
             total_revenue += price_val * quantity_val
 
@@ -235,6 +235,8 @@ def calculate_yearly_financials(proj):
     npv_medio = np.sum(fcf_array / ((1 + wacc) ** np.arange(1, years + 1)))
 
     return df, npv_medio
+
+
 
 
 
