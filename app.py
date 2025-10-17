@@ -95,7 +95,7 @@ for i, proj in enumerate(st.session_state.projects):
                     # Toggle deterministico / stocastico
                     rev[key][y].setdefault("is_stochastic", True)
                     is_stochastic = st.checkbox(
-                        "Stocastico?",
+                        "Stocastico",
                         value=rev[key][y]["is_stochastic"],
                         key=f"{key}_stochastic_{i}_{j}_{y}"
                     )
@@ -427,6 +427,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
