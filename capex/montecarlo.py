@@ -185,51 +185,48 @@ def sample(dist_obj, year_idx=None):
 import numpy as np
 import pandas as pd
 
-def calculate_yearly_financials(proj):
+import numpy as np
+import pandas as pd
+
+def calculate_yearly_financials(proj, wacc):
     """
-    Calcola il dettaglio finanziario anno per anno per un progetto CAPEX.
-
-    Gestisce ricavi stocastici o deterministici per prezzo e quantità.
-
+    Calcola i flussi di cassa annuali e NPV attualizzato per un progetto CAPEX.
+    
     Args:
-        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
-
+        proj (dict): progetto con informazioni su ricavi, costi, ammortamenti, CAPEX
+        wacc (float): tasso di sconto annuo
+        
     Returns:
-        df (pd.DataFrame): dettagli finanziari anno per anno
-        npv_medio (float): NPV medio cumulato
+        tuple: (DataFrame dettagli annuali, NPV medio attualizzato)
     """
-
     years = proj["years"]
+    
     revenues_total = []
-
-    # Lista annuale costi fissi e ammortamenti
-    fixed_costs = proj.get("fixed_costs", [0.0]*years)
-    depreciation = proj.get("depreciation", [0.0]*years)
-    depreciation_0 = proj.get("depreciation_0", 0.0)
-
-    capex_rec = proj.get("capex_rec", [0.0]*years)
-    tax_rate = proj.get("tax", 0.3)
+    ebitda_list = []
+    ebit_list = []
+    taxes_list = []
+    fcf_list = []
+    discounted_fcf_list = []
 
     for year in range(years):
         # --- Ricavi ---
         total_revenue = 0.0
-
-        for rev in proj.get("revenues_list", []):
+        for rev in proj["revenues_list"]:
             # Price
             if rev["price"][year]["is_stochastic"]:
                 price_val = sample(rev["price"][year], year)
             else:
                 price_val = rev["price"][year].get("value", 0.0)
-
+            
             # Quantity
             if rev["quantity"][year]["is_stochastic"]:
                 quantity_val = sample(rev["quantity"][year], year)
             else:
-                quantity_val = rev["quantity"][year].get("value", 1.0)
+                quantity_val = 1
 
-            # Se entrambi deterministici, il valore totale è direttamente price_val
+            # Ricavo totale
             if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
-                revenue_year = price_val
+                revenue_year = price_val  # valore già totale
             else:
                 revenue_year = price_val * quantity_val
 
@@ -237,64 +234,58 @@ def calculate_yearly_financials(proj):
 
         revenues_total.append(total_revenue)
 
-    # --- Costi variabili ---
-    var_pct = proj.get("costs", {}).get("var_pct", 0.0)
-    var_costs = [r * var_pct for r in revenues_total]
+        # --- Costi ---
+        fixed_cost = proj.get("fixed_costs", [0]*years)[year]
+        var_cost = total_revenue * proj["costs"].get("var_pct", 0.0)
+        other_costs_total = sum(
+            sample(cost.get("values", None), year) for cost in proj.get("other_costs", [])
+        )
 
-    # --- Costi aggiuntivi stocastici ---
-    other_costs_total = []
-    for year in range(years):
-        year_other = 0.0
-        for cost in proj.get("other_costs", []):
-            if cost["values"][year]["is_stochastic"]:
-                year_other += sample(cost["values"][year], year)
-            else:
-                year_other += cost["values"][year].get("value", 0.0)
-        other_costs_total.append(year_other)
+        # --- EBITDA ---
+        ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
+        ebitda_list.append(ebitda)
 
-    # --- EBITDA ---
-    ebitda = [
-        revenues_total[y] - var_costs[y] - fixed_costs[y] - other_costs_total[y]
-        for y in range(years)
-    ]
+        # --- Ammortamenti ---
+        depreciation = proj.get("depreciation", [0]*years)[year]
+        depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+        ammortamenti_tot = depreciation + depreciation_0
 
-    # --- EBIT ---
-    ammortamenti_tot = [depreciation[y] + (depreciation_0 if year == 0 else 0.0) for year in range(years)]
-    ebit = [ebitda[y] - ammortamenti_tot[y] for y in range(years)]
+        # --- EBIT ---
+        ebit = ebitda - ammortamenti_tot
+        ebit_list.append(ebit)
 
-    # --- Tasse ---
-    taxes = []
-    for y in range(years):
-        tax = -ebit[y] * tax_rate
-        if ebit[y] < 0:
-            tax = -tax  # beneficio fiscale
-        taxes.append(tax)
+        # --- Tasse ---
+        taxes = -ebit * proj["tax"]
+        if ebit < 0:
+            taxes = -taxes
+        taxes_list.append(taxes)
 
-    # --- FCF ---
-    fcf = [ebitda[y] + taxes[y] - capex_rec[y] for y in range(years)]
+        # --- FCF ---
+        capex_rec = proj.get("capex_rec", [0]*years)[year]
+        fcf = ebitda + taxes - capex_rec
+        fcf_list.append(fcf)
 
-    # --- DCF attualizzato ---
-    wacc = proj.get("wacc", 0.1)
-    dcf = [fcf[y] / ((1 + wacc) ** (y + 1)) for y in range(years)]
+        # --- FCF attualizzato ---
+        discounted_fcf = fcf / ((1 + wacc) ** (year + 1))
+        discounted_fcf_list.append(discounted_fcf)
 
-    # --- DataFrame finale ---
+    # --- Creazione DataFrame annuale ---
     df = pd.DataFrame({
         "Anno": list(range(1, years+1)),
         "Ricavi": revenues_total,
-        "Costi Variabili": var_costs,
-        "Costi Fissi": fixed_costs,
-        "Costi Aggiuntivi": other_costs_total,
-        "EBITDA": ebitda,
-        "Ammortamenti": ammortamenti_tot,
-        "EBIT": ebit,
-        "Tasse": taxes,
-        "FCF": fcf,
-        "DCF": dcf
+        "EBITDA": ebitda_list,
+        "EBIT": ebit_list,
+        "Tasse": taxes_list,
+        "FCF": fcf_list,
+        "FCF Attualizzato": discounted_fcf_list
     })
 
-    npv_medio = sum(dcf)
+    # --- NPV medio attualizzato ---
+    npv_medio = np.sum(discounted_fcf_list)
 
     return df, npv_medio
+
+
 
 
 
