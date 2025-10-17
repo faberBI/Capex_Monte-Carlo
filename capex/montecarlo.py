@@ -7,15 +7,10 @@ import pandas as pd
 
 def run_montecarlo(proj, n_sim, wacc):
     """
-    Simulazioni Monte Carlo per un progetto CAPEX.
-
-    EBITDA = Ricavi - Costi
-    EBIT = EBITDA - Ammortamenti
-    Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
-    FCF = EBITDA + Tasse - CAPEX
+    Simulazioni Monte Carlo per un progetto CAPEX aggiornato alla UI nuova.
 
     Args:
-        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
+        proj (dict): progetto con info su CAPEX, ricavi, costi, ammortamenti
         n_sim (int): numero simulazioni
         wacc (float): tasso di sconto WACC
 
@@ -48,24 +43,20 @@ def run_montecarlo(proj, n_sim, wacc):
             total_revenue = 0.0
             for rev in proj["revenues_list"]:
                 # Price
-                if rev["price"][year]["is_stochastic"]:
-                    price_val = sample(rev["price"][year], year)
+                price_data = rev["price"][year]
+                if price_data.get("is_stochastic", True):
+                    price_val = sample(price_data, year)
                 else:
-                    price_val = rev["price"][year].get("value", 0.0)
+                    price_val = price_data.get("value", 0.0)
 
                 # Quantity
-                if rev["quantity"][year]["is_stochastic"]:
-                    quantity_val = sample(rev["quantity"][year], year)
+                quantity_data = rev["quantity"][year]
+                if quantity_data.get("is_stochastic", True):
+                    quantity_val = sample(quantity_data, year)
                 else:
-                    quantity_val = rev["quantity"][year].get("value", 1.0)
+                    quantity_val = quantity_data.get("value", 1.0)
 
-                # Deterministico totale: se entrambi deterministici
-                if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
-                    revenue_year = price_val  # già inserito nella UI
-                else:
-                    revenue_year = price_val * quantity_val
-
-                total_revenue += revenue_year
+                total_revenue += price_val * quantity_val
 
             # --- Costi ---
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
@@ -75,7 +66,7 @@ def run_montecarlo(proj, n_sim, wacc):
             )
 
             # --- EBITDA ---
-            ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
+            ebitda = total_revenue - fixed_cost - var_cost - other_costs_total
 
             # --- Ammortamenti ---
             depreciation = proj.get("depreciation", [0]*years)[year]
@@ -89,7 +80,6 @@ def run_montecarlo(proj, n_sim, wacc):
             taxes = -ebit * proj["tax"]
             if ebit < 0:
                 taxes = -taxes  # beneficio fiscale
-
             # --- FCF ---
             #capex_all = capex_init + capex_rec
             capex_all =  capex_rec
@@ -114,11 +104,15 @@ def run_montecarlo(proj, n_sim, wacc):
 
     # Percentili annuali DCF
     percentiles = [5, 25, 50, 75, 95]
-    yearly_dcf_percentiles = {f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles}
+    yearly_dcf_percentiles = {
+        f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles
+    }
 
     # Percentili cumulati NPV
     npv_cum_matrix = np.cumsum(yearly_dcf, axis=1)
-    yearly_npv_cum_percentiles = {f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles}
+    yearly_npv_cum_percentiles = {
+        f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
+    }
 
     pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
@@ -139,6 +133,7 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
+
 
 
 
@@ -256,6 +251,7 @@ def calculate_yearly_financials(proj, wacc=0.0):
     npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
 
     return df, npv_medio
+
 
 
 
