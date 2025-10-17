@@ -146,27 +146,35 @@ def run_montecarlo(proj, n_sim, wacc):
 
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
-    """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
+    """Campionamento stocastico per ricavi o other_costs."""
     if isinstance(dist_obj, list):
         if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
+            raise ValueError("year_idx deve essere specificato per liste anno per anno")
         dist_obj = dist_obj[year_idx]
 
     dist_type = dist_obj.get("dist", "Normale")
-    p1 = dist_obj.get("p1", 0.0)
-    p2 = dist_obj.get("p2", 0.0)
-    p3 = dist_obj.get("p3", p1+p2)
+    p1 = dist_obj.get("p1", 0.0) or 0.0
+    p2 = dist_obj.get("p2", 0.0) or 0.0
+    p3 = dist_obj.get("p3", p1 + p2) or (p1 + p2)
 
     if dist_type == "Normale":
-        return np.random.normal(p1, p2)
+        return np.random.normal(p1, max(p2, 1e-6))
     elif dist_type == "Triangolare":
+        # Corregge p2 se fuori range
+        p2 = max(min(p2, p3), p1)
         return np.random.triangular(p1, p2, p3)
     elif dist_type == "Lognormale":
-        return np.random.lognormal(p1, p2)
+        return np.random.lognormal(p1, max(p2, 1e-6))
     elif dist_type == "Uniforme":
+        if p2 < p1:
+            p2 = p1
         return np.random.uniform(p1, p2)
+    elif dist_type == "Deterministico":
+        # Per il nuovo toggle deterministico
+        return dist_obj.get("value", p1)  # prende value se presente
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
+
 
 
 def calculate_yearly_financials(proj):
@@ -249,3 +257,4 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
