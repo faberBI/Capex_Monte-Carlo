@@ -81,55 +81,63 @@ for i, proj in enumerate(st.session_state.projects):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
                # ------------------ Ricavi multipli con distribuzione / deterministico ------------------
-        st.subheader("📈 Ricavi")
+                st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
+            
+            # Assicuriamoci che price e quantity abbiano almeno 'years' elementi
             for key in ["price", "quantity"]:
-                # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
-                    rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0})
+                    rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0, "value": 0.0})
+        
+            for y in range(proj["years"]):
+                st.markdown(f"Anno {y+1} - {rev['name']}")
                 
-                for y in range(proj["years"]):
-                    st.markdown(f"Anno {y+1} - {key}")
+                # Toggle stocastico / deterministico
+                is_stochastic = st.checkbox(
+                    "Stocastico",
+                    value=rev["price"][y]["is_stochastic"] or rev["quantity"][y]["is_stochastic"],
+                    key=f"stochastic_{i}_{j}_{y}"
+                )
                 
-                    # Toggle deterministico / stocastico
-                    rev[key][y].setdefault("is_stochastic", True)
-                    is_stochastic = st.checkbox(
-                        "Stocastico",
-                        value=rev[key][y]["is_stochastic"],
-                        key=f"{key}_stochastic_{i}_{j}_{y}"
+                if is_stochastic:
+                    rev["price"][y]["is_stochastic"] = True
+                    rev["quantity"][y]["is_stochastic"] = True
+            
+                    # Price
+                    dist_type = st.selectbox(
+                        "Distribuzione Price",
+                        ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                        index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["price"][y].get("dist", "Normale")),
+                        key=f"price_dist_{i}_{j}_{y}"
                     )
-                    rev[key][y]["is_stochastic"] = is_stochastic
+                    rev["price"][y]["dist"] = dist_type
+                    rev["price"][y]["p1"] = st.number_input("Price p1", value=rev["price"][y].get("p1",0.0), key=f"price_p1_{i}_{j}_{y}")
+                    rev["price"][y]["p2"] = st.number_input("Price p2", value=rev["price"][y].get("p2",0.0), key=f"price_p2_{i}_{j}_{y}")
                 
-                    if is_stochastic:
-                        dist_type = st.selectbox(
-                            "Distribuzione",
-                            ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
-                            key=f"{key}_dist_{i}_{j}_{y}"
-                        )
-                        rev[key][y]["dist"] = dist_type
-                    
-                        if dist_type == "Normale":
-                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        elif dist_type == "Triangolare":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
-                        elif dist_type == "Lognormale":
-                            rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        elif dist_type == "Uniforme":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    else:
-                        # Deterministico: inserisci price e quantity separatamente
-                        rev[key][y]["value"] = st.number_input(
-                            f"{key.capitalize()} deterministico anno {y+1}",
-                            value=rev[key][y].get("value", 0.0),
-                            key=f"{key}_det_{i}_{j}_{y}"
-                        )
+                    # Quantity
+                    dist_type_q = st.selectbox(
+                        "Distribuzione Quantity",
+                        ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                        index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["quantity"][y].get("dist", "Normale")),
+                        key=f"quantity_dist_{i}_{j}_{y}"
+                    )
+                    rev["quantity"][y]["dist"] = dist_type_q
+                    rev["quantity"][y]["p1"] = st.number_input("Quantity p1", value=rev["quantity"][y].get("p1",0.0), key=f"quantity_p1_{i}_{j}_{y}")
+                    rev["quantity"][y]["p2"] = st.number_input("Quantity p2", value=rev["quantity"][y].get("p2",0.0), key=f"quantity_p2_{i}_{j}_{y}")
+                
+                else:
+                    # Deterministico: inserisci il ricavo totale direttamente
+                    rev["price"][y]["is_stochastic"] = False
+                    rev["quantity"][y]["is_stochastic"] = False
+                    rev["price"][y]["value"] = st.number_input(
+                        f"Ricavo totale anno {y+1}",
+                        value=rev["price"][y].get("value", 0.0),
+                        key=f"revenue_det_{i}_{j}_{y}"
+                    )
+                    # Impostiamo quantity a 1 per evitare moltiplicazioni
+                    rev["quantity"][y]["value"] = 1.0
+                
                     
                     
         
@@ -429,6 +437,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
