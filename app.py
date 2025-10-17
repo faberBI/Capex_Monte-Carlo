@@ -17,8 +17,40 @@ from capex.visuals import (
     plot_probs_kri
 )
 
-# ------------------ API Key ------------------
+# ------------------ API Key OpenAI ------------------
 api_key = st.secrets["OPENAI_API_KEY"]
+
+
+
+# ------------------ Funzione di campionamento ------------------
+def sample(dist_obj, year_idx=None):
+    """Campionamento stocastico per ricavi o other_costs."""
+    if isinstance(dist_obj, list):
+        if year_idx is None:
+            raise ValueError("year_idx deve essere specificato per liste anno per anno")
+        dist_obj = dist_obj[year_idx]
+
+    dist_type = dist_obj.get("dist", "Normale")
+    p1 = dist_obj.get("p1", 0.0) or 0.0
+    p2 = dist_obj.get("p2", 0.0) or 0.0
+    p3 = dist_obj.get("p3", p1 + p2) or (p1 + p2)
+
+    if dist_type == "Normale":
+        return np.random.normal(p1, max(p2, 1e-6))
+    elif dist_type == "Triangolare":
+        p2 = max(min(p2, p3), p1)
+        return np.random.triangular(p1, p2, p3)
+    elif dist_type == "Lognormale":
+        return np.random.lognormal(p1, max(p2, 1e-6))
+    elif dist_type == "Uniforme":
+        if p2 < p1:
+            p2 = p1
+        return np.random.uniform(p1, p2)
+    elif dist_type == "Deterministico":
+        return dist_obj.get("value", p1)
+    else:
+        raise ValueError(f"Distribuzione non supportata: {dist_type}")
+
 
 # ------------------ Session state ------------------
 if "projects" not in st.session_state:
@@ -26,7 +58,7 @@ if "projects" not in st.session_state:
 if "results" not in st.session_state:
     st.session_state.results = None
 
-# ------------------ Funzione aggiungi progetto ------------------
+# ------------------ Aggiungi progetto ------------------
 def add_project():
     st.session_state.projects.append({
         "name": f"Progetto {len(st.session_state.projects)+1}",
@@ -37,27 +69,26 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
-        "capex_rec": [0.0]*10,
-        "fixed_costs": [0.0]*10,
+        "capex_rec": None,
+        "fixed_costs": None,
         "revenues_list": [
             {
                 "name": "Ricavo 1",
-                "price": [{"is_stochastic": True, "dist": "Normale", "p1": 100.0, "p2": 10.0, "value": 0.0} for _ in range(10)],
-                "quantity": [{"is_stochastic": True, "dist": "Normale", "p1": 1000.0, "p2": 100.0, "value": 0.0} for _ in range(10)]
+                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0, "value": 100.0, "is_stochastic": True} for _ in range(10)],
+                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0, "value": 1.0, "is_stochastic": True} for _ in range(10)]
             }
         ],
         "costs": {"var_pct": 0.08},
         "other_costs": [],
         "price_growth": [0.01]*10,
         "quantity_growth": [0.05]*10,
-        "depreciation": [20.0]*10,
-        "depreciation_0": 20.0
+        "depreciation": [20.0]*10
     })
 
 # ------------------ UI ------------------
 st.title("📊 CAPEX @Risk Framework by ERM")
 st.button("➕ Aggiungi progetto", on_click=add_project)
-n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000,  step=5000)
+n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000, step=5000)
 
 # ------------------ Loop progetti ------------------
 for i, proj in enumerate(st.session_state.projects):
@@ -73,11 +104,13 @@ for i, proj in enumerate(st.session_state.projects):
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
         # ------------------ CAPEX Ricorrente ------------------
-        st.subheader("🏗️ CAPEX Ricorrente")
+        st.subheader("🏗️ CAPEX Ricorrente (anno per anno)")
         if proj.get("capex_rec") is None:
-            proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
-        for y in range(proj["years"]):
-            proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
+            if st.button(f"➕ Aggiungi CAPEX Ricorrente", key=f"add_capex_rec_{i}"):
+                proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
+        if proj.get("capex_rec") is not None:
+            for y in range(proj["years"]):
+                proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
         # ------------------ Ricavi ------------------
         st.subheader("📈 Ricavi")
@@ -88,97 +121,61 @@ for i, proj in enumerate(st.session_state.projects):
                     rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0, "value": 0.0})
 
             for y in range(proj["years"]):
-                st.markdown(f"Anno {y+1}")
+                st.markdown(f"Anno {y+1} - {rev['name']}")
                 is_stochastic = st.checkbox(
                     "Stocastico",
-                    value=rev["price"][y].get("is_stochastic", True) or rev["quantity"][y].get("is_stochastic", True),
+                    value=rev["price"][y]["is_stochastic"] or rev["quantity"][y]["is_stochastic"],
                     key=f"stochastic_{i}_{j}_{y}"
                 )
-                if is_stochastic:
-                    rev["price"][y]["is_stochastic"] = True
-                    rev["quantity"][y]["is_stochastic"] = True
+                rev["price"][y]["is_stochastic"] = is_stochastic
+                rev["quantity"][y]["is_stochastic"] = is_stochastic
 
-                    # Price
-                    dist_type = st.selectbox(
+                if is_stochastic:
+                    rev["price"][y]["dist"] = st.selectbox(
                         "Distribuzione Price",
                         ["Normale", "Triangolare", "Lognormale", "Uniforme"],
                         index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["price"][y].get("dist", "Normale")),
                         key=f"price_dist_{i}_{j}_{y}"
                     )
-                    rev["price"][y].update({"dist": dist_type})
                     rev["price"][y]["p1"] = st.number_input("Price p1", value=rev["price"][y].get("p1",0.0), key=f"price_p1_{i}_{j}_{y}")
                     rev["price"][y]["p2"] = st.number_input("Price p2", value=rev["price"][y].get("p2",0.0), key=f"price_p2_{i}_{j}_{y}")
-
-                    # Quantity
-                    dist_type_q = st.selectbox(
+                    rev["quantity"][y]["dist"] = st.selectbox(
                         "Distribuzione Quantity",
                         ["Normale", "Triangolare", "Lognormale", "Uniforme"],
                         index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["quantity"][y].get("dist", "Normale")),
                         key=f"quantity_dist_{i}_{j}_{y}"
                     )
-                    rev["quantity"][y].update({"dist": dist_type_q})
                     rev["quantity"][y]["p1"] = st.number_input("Quantity p1", value=rev["quantity"][y].get("p1",0.0), key=f"quantity_p1_{i}_{j}_{y}")
                     rev["quantity"][y]["p2"] = st.number_input("Quantity p2", value=rev["quantity"][y].get("p2",0.0), key=f"quantity_p2_{i}_{j}_{y}")
                 else:
-                    rev["price"][y]["is_stochastic"] = False
-                    rev["quantity"][y]["is_stochastic"] = False
-                    rev["price"][y]["value"] = st.number_input(f"Ricavo totale anno {y+1}", value=rev["price"][y].get("value", 0.0), key=f"revenue_det_{i}_{j}_{y}")
-                    rev["quantity"][y]["value"] = 1.0  # deterministico
+                    rev["price"][y]["value"] = st.number_input(f"Ricavo totale anno {y+1}", value=rev["price"][y].get("value",0.0), key=f"revenue_det_{i}_{j}_{y}")
+                    rev["quantity"][y]["value"] = 1.0  # quantità fittizia per ricavo totale
 
-        # ------------------ Costi variabili e fissi ------------------
+        # ------------------ Costi Variabili ------------------
         st.subheader("💸 Costi Variabili")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
 
+        # ------------------ Costi Fissi ------------------
         st.subheader("💸 Costi Fissi annui")
         if proj.get("fixed_costs") is None or len(proj["fixed_costs"]) != proj["years"]:
             proj["fixed_costs"] = [0.0]*proj["years"]
         for y in range(proj["years"]):
             proj["fixed_costs"][y] = st.number_input(f"Costi fissi anno {y+1}", value=proj["fixed_costs"][y], key=f"fixed_{i}_{y}")
 
-        # ------------------ Ammortamento ------------------
+        # ------------------ Ammortamenti ------------------
         st.subheader("🏗️ Ammortamento")
-        proj["depreciation_0"] = st.number_input(f"Ammortamento anno 0", value=proj.get("depreciation_0", proj["capex"]/proj["years"]), key=f"dep0_{i}")
+        if "depreciation_0" not in proj:
+            proj["depreciation_0"] = proj["capex"]/proj["years"]
+        proj["depreciation_0"] = st.number_input(f"Ammortamento anno 0", value=proj["depreciation_0"], key=f"dep0_{i}")
         if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
             proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
         df_dep = pd.DataFrame({"Anno": range(1, proj["years"]+1), "Ammortamento": proj["depreciation"]})
         df_dep_edit = st.data_editor(df_dep, key=f"dep_{i}", num_rows="dynamic")
         proj["depreciation"] = df_dep_edit["Ammortamento"].tolist()
 
-        # ------------------ Trend annuali ------------------
-        st.subheader("📊 Trend annuali")
-        proj.setdefault("price_growth", [0.0]*proj["years"])
-        proj.setdefault("quantity_growth", [0.0]*proj["years"])
-        for t in range(proj["years"]):
-            proj["price_growth"][t] = st.slider(f"Crescita prezzo anno {t+1} (%)", -0.5, 0.5, proj["price_growth"][t], 0.05, key=f"pg_{i}_{t}")
-            proj["quantity_growth"][t] = st.slider(f"Crescita quantità anno {t+1} (%)", -0.5, 0.5, proj["quantity_growth"][t], 0.05, key=f"qg_{i}_{t}")
-
-        # WACC
+        # ------------------ WACC ------------------
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
-
-# ------------------ Funzione di campionamento stocastico ------------------
-def sample(dist_obj, year_idx=None):
-    if isinstance(dist_obj, list):
-        if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste")
-        dist_obj = dist_obj[year_idx]
-
-    if not dist_obj.get("is_stochastic", True):
-        return dist_obj.get("value", 0.0)
-
-    dist_type = dist_obj.get("dist", "Normale")
-    p1, p2, p3 = dist_obj.get("p1", 0.0), dist_obj.get("p2", 0.0), dist_obj.get("p3", dist_obj.get("p1",0.0)+dist_obj.get("p2",0.0))
-    
-    if dist_type == "Normale":
-        return np.random.normal(p1, p2)
-    elif dist_type == "Triangolare":
-        return np.random.triangular(p1, p2, p3)
-    elif dist_type == "Lognormale":
-        return np.random.lognormal(p1, p2)
-    elif dist_type == "Uniforme":
-        return np.random.uniform(p1, p2)
-    else:
-        raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 # ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
@@ -188,7 +185,6 @@ if st.button("▶️ Avvia simulazioni"):
         sim_result = run_montecarlo(proj, n_sim, wacc)
         results.append({"name": proj["name"], **sim_result})
 
-        # Visualizzazione
         st.subheader(f"📊 Risultati {proj['name']}")
         st.write(f"Expected NPV: {sim_result['expected_npv']:.2f}")
         st.write(f"CaR (95%): {sim_result['car']:.2f}")
@@ -200,39 +196,17 @@ if st.button("▶️ Avvia simulazioni"):
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
         st.plotly_chart(plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]), use_container_width=True)
 
-        kri_pct = (sim_result["expected_npv"] - sim_result["car"]) / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
-        kri_pct = np.clip(kri_pct, 0, 1)
-        kri_text = "🔴 Rischio Alto" if kri_pct > 0.5 else ("🟡 Rischio Medio" if kri_pct > 0.25 else "🟢 Rischio Basso")
-        st.markdown(f"**KRI sintetico on CaR:** {kri_text} ({kri_pct*100:.1f}% del valore atteso)")
-
-        st.plotly_chart(plot_probs_kri(sim_result['downside_prob'],  proj["name"]), use_container_width=True)
-        kri_probs_text = "🔴 Rischio Alto" if sim_result['downside_prob']> 0.07 else ("🟡 Rischio Medio" if sim_result['downside_prob'] > 0.05 else "🟢 Rischio Basso")
-        st.markdown(f"**KRI sintetico on probs:** {kri_probs_text}")
-
-        npv_cum_matrix = np.cumsum(sim_result['yearly_cash_flows'], axis=1)
-        sim_result['npv_cum_matrix'] = npv_cum_matrix
-        median_cum_npv = np.median(npv_cum_matrix, axis=0)
-        pbp_median = np.argmax(median_cum_npv > 0) + 1
-        st.write(f"**PBP attualizzato medio (mediana NPV):** {pbp_median} anni")
-        st.pyplot(plot_cumulative_npv(npv_cum_matrix, proj['name']))
-
     st.session_state.results = results
-
 
 # ------------------ Dettaglio finanziario per anno ------------------
 if st.session_state.results:
     for r in st.session_state.results:
-        # Recupera il progetto aggiornato dallo state UI
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        
-        # Calcola WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
-        
-        # Calcolo dei flussi annuali
-        df_financials, npv_medio = calculate_yearly_financials(proj, wacc= wacc)
-        
+        df_financials, npv_medio = calculate_yearly_financials(proj, wacc=wacc)
         st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
         st.dataframe(df_financials.style.format("{:.2f}"))
+
 
 
 
@@ -343,6 +317,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
