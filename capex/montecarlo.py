@@ -53,7 +53,7 @@ def run_montecarlo(proj, n_sim, wacc):
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
             depreciation = proj.get("depreciation", [0]*years)[year]
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
-            ammortamenti_tot = depreciation + depreciation_0
+            ammortamenti_tot = depreciation 
 
             # Ricavi stocastici
             total_revenue = sum(
@@ -77,15 +77,13 @@ def run_montecarlo(proj, n_sim, wacc):
                 taxes = -taxes  # beneficio fiscale positivo
 
             # --- FCF ---
-            #capex_all = capex_init + capex_rec
             capex_all =  capex_rec
             
             if capex_all== 0 and ebitda<1:
                 taxes = taxes*-1
                 fcf = ebitda + taxes - capex_all
             else:
-                # fcf = ebitda + taxes - capex_init - capex_rec
-                fcf = ebitda + taxes - capex_rec
+                fcf = ebitda + taxes - capex_all
 
             # --- DCF attualizzato ---
             dcf = fcf / ((1 + wacc) ** (year + 1))
@@ -236,3 +234,4 @@ def calculate_yearly_financials(proj):
     })
 
     return df_financials, npv_medio
+
