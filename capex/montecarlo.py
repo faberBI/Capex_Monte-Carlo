@@ -193,16 +193,21 @@ def calculate_yearly_financials(proj, wacc=0.0):
         # --- Ricavi ---
         total_revenue = 0.0
         for rev in proj["revenues_list"]:
-            # Deterministico: prendere direttamente il valore inserito in UI
-            if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
-                revenue_year = rev["price"][year].get("value", 0.0)
+            # Price
+            price_data = rev["price"][year]
+            if price_data.get("is_stochastic", True):
+                price_val = sample(price_data, year)
             else:
-                # Stocastico o misto
-                price_val = sample(rev["price"][year], year) if rev["price"][year]["is_stochastic"] else rev["price"][year].get("value", 0.0)
-                quantity_val = sample(rev["quantity"][year], year) if rev["quantity"][year]["is_stochastic"] else rev["quantity"][year].get("value", 1.0)
-                revenue_year = price_val * quantity_val
+                price_val = price_data.get("value", 0.0)
 
-            total_revenue += revenue_year
+            # Quantity
+            quantity_data = rev["quantity"][year]
+            if quantity_data.get("is_stochastic", True):
+                quantity_val = sample(quantity_data, year)
+            else:
+                quantity_val = quantity_data.get("value", 1.0)
+
+            total_revenue += price_val * quantity_val
 
         revenues_total.append(total_revenue)
 
@@ -214,7 +219,7 @@ def calculate_yearly_financials(proj, wacc=0.0):
         )
 
         # --- EBITDA ---
-        ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
+        ebitda = total_revenue - fixed_cost - var_cost - other_costs_total
         ebitda_list.append(ebitda)
 
         # --- Ammortamenti ---
@@ -251,6 +256,8 @@ def calculate_yearly_financials(proj, wacc=0.0):
     npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
 
     return df, npv_medio
+
+
 
 
 
