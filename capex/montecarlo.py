@@ -181,13 +181,6 @@ def sample(dist_obj, year_idx=None):
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
-
-import numpy as np
-import pandas as pd
-
-import numpy as np
-import pandas as pd
-
 def calculate_yearly_financials(proj, wacc):
     """
     Calcola i flussi di cassa annuali e NPV attualizzato per un progetto CAPEX.
@@ -284,6 +277,7 @@ def calculate_yearly_financials(proj, wacc):
     npv_medio = np.sum(discounted_fcf_list)
 
     return df, npv_medio
+
 
 
 
