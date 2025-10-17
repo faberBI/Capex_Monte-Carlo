@@ -94,7 +94,15 @@ def run_montecarlo(proj, n_sim, wacc):
                 taxes = -taxes
 
             # --- FCF ---
-            fcf = ebitda + taxes - capex_rec
+            #capex_all = capex_init + capex_rec
+            capex_all =  capex_rec
+            
+            if capex_all== 0 and ebitda<1:
+                taxes = taxes*-1
+                fcf = ebitda + taxes - capex_all
+            else:
+                # fcf = ebitda + taxes - capex_init - capex_rec
+                fcf = ebitda + taxes - capex_rec
 
             # --- DCF attualizzato ---
             dcf = fcf / ((1 + wacc) ** (year + 1))
@@ -263,6 +271,7 @@ def calculate_yearly_financials(proj, wacc=0.0):
     npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
 
     return df, npv_medio
+
 
 
 
