@@ -6,46 +6,33 @@ from capex.wacc import calculate_wacc
 import pandas as pd
 
 def run_montecarlo(proj, n_sim, wacc):
-    """
-    Simulazioni Monte Carlo per un progetto CAPEX con logica:
-    EBITDA = Ricavi - Costi
-    EBIT = EBITDA - Ammortamenti
-    Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
-    FCF = EBITDA + Tasse - CAPEX
-
-    Supporta ricavi deterministici o stocastici anno per anno.
-
-    Args:
-        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
-        n_sim (int): numero simulazioni
-        wacc (float): tasso di sconto WACC
-
-    Returns:
-        dict: risultati simulazione con npv_array, yearly_cash_flows, percentili, npv cumulato e PBP
-    """
-    import numpy as np
-
     years = proj["years"]
     npv_array = np.zeros(n_sim)
-    yearly_dcf = np.zeros((n_sim, years))  # salviamo DCF attualizzati
+    yearly_dcf = np.zeros((n_sim, years))
     pbp_array = np.zeros(n_sim)
 
     def calculate_fractional_pbp(discounted_cum_cf):
-        """Interpolazione lineare per PBP frazionario"""
         negative_idx = np.where(discounted_cum_cf < 0)[0]
         if len(negative_idx) == 0:
-            return 1.0  # PBP < primo anno
+            return 1.0
         last_neg_idx = negative_idx[-1]
         if last_neg_idx == len(discounted_cum_cf) - 1:
-            return np.nan  # mai positivo
+            return np.nan
         cf_before = discounted_cum_cf[last_neg_idx]
         cf_after = discounted_cum_cf[last_neg_idx + 1]
         fraction = -cf_before / (cf_after - cf_before)
         return last_neg_idx + 1 + fraction
 
+    def get_revenue_value(rev_component, year):
+        """Ritorna il valore deterministico o stocastico di price/quantity."""
+        val_obj = rev_component[year]
+        if val_obj.get("mode", "Stocastico") == "Deterministico":
+            return val_obj.get("value", 0.0)
+        else:
+            return sample(val_obj)
+
     for sim in range(n_sim):
         dcf_per_year = []
-
         for year in range(years):
             # CAPEX ricorrente
             capex_rec = proj.get("capex_rec", [0]*years)[year]
@@ -56,39 +43,25 @@ def run_montecarlo(proj, n_sim, wacc):
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
 
-            # --- Ricavi: supporto deterministico o stocastico ---
-            total_revenue = 0
-            for rev in proj["revenues_list"]:
-                # Price
-                price_obj = rev["price"][year]
-                if price_obj.get("type", "stocastico") == "deterministico":
-                    price_val = price_obj.get("value", 0.0)
-                else:
-                    price_val = sample(price_obj, year)
-                
-                # Quantity
-                qty_obj = rev["quantity"][year]
-                if qty_obj.get("type", "stocastico") == "deterministico":
-                    qty_val = qty_obj.get("value", 0.0)
-                else:
-                    qty_val = sample(qty_obj, year)
-                
-                total_revenue += price_val * qty_val
+            # Ricavi (deterministico o stocastico)
+            total_revenue = sum(
+                get_revenue_value(rev["price"], year) * get_revenue_value(rev["quantity"], year)
+                for rev in proj["revenues_list"]
+            )
 
             # Costi variabili e aggiuntivi
             var_cost = total_revenue * proj["costs"]["var_pct"]
-            other_costs_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+            other_costs_total = sum(
+                sample(cost.get("values", None), year) 
+                for cost in proj.get("other_costs", [])
+            )
 
-            # --- EBITDA ---
+            # EBITDA, EBIT, Tasse
             ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
-
-            # --- EBIT ---
             ebit = ebitda - ammortamenti_tot
-
-            # --- Tasse ---
             taxes = -ebit * proj["tax"]
             if ebit < 0:
-                taxes = -taxes  # beneficio fiscale positivo
+                taxes = -taxes
 
             # --- FCF ---
             #capex_all = capex_init + capex_rec
@@ -100,8 +73,7 @@ def run_montecarlo(proj, n_sim, wacc):
             else:
                 # fcf = ebitda + taxes - capex_init - capex_rec
                 fcf = ebitda + taxes - capex_rec
-
-            # --- DCF attualizzato ---
+            
             dcf = fcf / ((1 + wacc) ** (year + 1))
             dcf_per_year.append(dcf)
 
@@ -111,27 +83,24 @@ def run_montecarlo(proj, n_sim, wacc):
         pbp_array[sim] = calculate_fractional_pbp(np.cumsum(dcf_per_year))
 
     avg_discounted_pbp = np.nanmean(pbp_array)
-
-    # Percentili annuali DCF
     percentiles = [5, 25, 50, 75, 95]
+
     yearly_dcf_percentiles = {
         f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles
     }
 
-    # Percentili cumulati NPV
     npv_cum_matrix = np.cumsum(yearly_dcf, axis=1)
     yearly_npv_cum_percentiles = {
         f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
     }
 
     pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
-
     car_5pct = np.percentile(npv_array, 5)
     cvar_5pct = np.mean(npv_array[npv_array <= car_5pct]) if np.any(npv_array <= car_5pct) else car_5pct
 
     return {
         "npv_array": npv_array,
-        "yearly_cash_flows": yearly_dcf,  # contiene i DCF attualizzati
+        "yearly_cash_flows": yearly_dcf,
         "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": car_5pct,
@@ -143,6 +112,8 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
+
+
 
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
@@ -178,83 +149,60 @@ def sample(dist_obj, year_idx=None):
 
 
 def calculate_yearly_financials(proj):
-    """
-    Calcola i valori medi anno per anno per un progetto:
-    Ricavi, Costi, Ammortamenti, EBITDA, EBIT, Tasse, NOPAT, FCF, DCF.
-    
-    Args:
-        proj (dict): progetto con tutti i dati
-    
-    Returns:
-        pd.DataFrame: tabella anno per anno con tutte le metriche
-        float: NPV medio
-    """
     years = proj["years"]
+    df = pd.DataFrame(index=range(1, years+1))
+    
+    def get_rev_value(rev_component, year):
+        val_obj = rev_component[year]
+        if val_obj.get("mode", "Stocastico") == "Deterministico":
+            return val_obj.get("value", 0.0)
+        else:
+            return sample(val_obj)
 
-    # Inizializzo array
-    ricavi = np.zeros(years)
-    var_costs = np.zeros(years)
-    fixed_costs = np.array(proj.get("fixed_costs", [0]*years))
-    other_costs = np.zeros(years)
-    capex_init = np.zeros(years)
-    capex_rec = np.array(proj.get("capex_rec", [0]*years))
-    depreciation = np.array(proj.get("depreciation", [0]*years))
-    depreciation_0 = proj.get("depreciation_0", 0)
-    ammortamenti_tot = np.array([depreciation_0] + list(depreciation[1:]))
+    revenues = []
+    var_costs = []
+    fixed_costs = []
+    other_costs = []
+    ebitda_list = []
+    ebit_list = []
+    taxes_list = []
+    fcf_list = []
 
-    # --- Calcolo medie anno per anno ---
     for year in range(years):
-        # Ricavi medi
-        total_rev = 0
-        for rev in proj["revenues_list"]:
-            price = rev["price"][year]["p1"]
-            quantity = rev["quantity"][year]["p1"]
-            total_rev += price * quantity
-        ricavi[year] = total_rev
+        total_revenue = sum(
+            get_rev_value(rev["price"], year) * get_rev_value(rev["quantity"], year)
+            for rev in proj["revenues_list"]
+        )
+        revenues.append(total_revenue)
+        var_cost = total_revenue * proj["costs"]["var_pct"]
+        var_costs.append(var_cost)
+        fixed_cost = proj.get("fixed_costs", [0]*years)[year]
+        fixed_costs.append(fixed_cost)
+        other_cost_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
+        other_costs.append(other_cost_total)
+        ebitda = total_revenue - var_cost - fixed_cost - other_cost_total
+        ebitda_list.append(ebitda)
+        depreciation = proj.get("depreciation", [0]*years)[year]
+        depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+        ebit = ebitda - (depreciation + depreciation_0)
+        ebit_list.append(ebit)
+        taxes = -ebit * proj["tax"]
+        if ebit < 0:
+            taxes = -taxes
+        taxes_list.append(taxes)
+        capex_rec = proj.get("capex_rec", [0]*years)[year]
+        fcf = ebitda + taxes - capex_rec
+        fcf_list.append(fcf)
 
-        # Costi variabili
-        var_costs[year] = total_rev * proj["costs"]["var_pct"]
+    df["Revenue"] = revenues
+    df["VarCost"] = var_costs
+    df["FixedCost"] = fixed_costs
+    df["OtherCosts"] = other_costs
+    df["EBITDA"] = ebitda_list
+    df["EBIT"] = ebit_list
+    df["Taxes"] = taxes_list
+    df["FCF"] = fcf_list
 
-        # Costi aggiuntivi medi
-        other_costs[year] = sum(cost["values"][year]["p1"] for cost in proj.get("other_costs", []))
+    return df, np.mean(fcf_list)
 
-        # CAPEX iniziale solo anno 0
-        capex_init[year] = proj["capex"] if year == 0 else 0
-
-    # --- EBITDA, EBIT, Tasse, NOPAT, FCF, DCF ---
-    ebitda = ricavi - var_costs - fixed_costs - other_costs
-    ebit = ebitda - ammortamenti_tot
-
-    # Tasse: segno coerente con EBIT
-    taxes = np.where(ebit >= 0, -ebit * proj["tax"], -ebit * proj["tax"])
-
-    nopat = ebit + taxes  # perché taxes hanno già il segno corretto
-    fcf = ebitda + taxes - capex_init - capex_rec
-
-    # DCF
-    wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
-    dcf = fcf / ((1 + wacc) ** (np.arange(1, years+1)))
-
-    # NPV medio
-    npv_medio = np.sum(dcf)
-
-    # --- Creazione DataFrame ---
-    df_financials = pd.DataFrame({
-        "Anno": np.arange(1, years+1),
-        "Ricavi": ricavi,
-        "Costi variabili": var_costs,
-        "Costi fissi": fixed_costs,
-        "Costi aggiuntivi": other_costs,
-        "CAPEX iniziale": capex_init,
-        "CAPEX ricorrente": capex_rec,
-        "Ammortamenti": ammortamenti_tot,
-        "EBITDA": ebitda,
-        "EBIT": ebit,
-        "Tasse": taxes,
-        "NOPAT": nopat,
-        "FCF": fcf,
-        "DCF": dcf
-    })
-
-    return df_financials, npv_medio
 
