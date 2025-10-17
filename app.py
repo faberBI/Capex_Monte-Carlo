@@ -116,10 +116,11 @@ for i, proj in enumerate(st.session_state.projects):
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
+            # Assicura che price e quantity abbiano la lunghezza corretta
             for key in ["price", "quantity"]:
                 while len(rev[key]) < proj["years"]:
-                    rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0, "value": 0.0})
-
+                    rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0})
+        
             for y in range(proj["years"]):
                 st.markdown(f"Anno {y+1} - {rev['name']}")
                 is_stochastic = st.checkbox(
@@ -129,7 +130,7 @@ for i, proj in enumerate(st.session_state.projects):
                 )
                 rev["price"][y]["is_stochastic"] = is_stochastic
                 rev["quantity"][y]["is_stochastic"] = is_stochastic
-
+            
                 if is_stochastic:
                     rev["price"][y]["dist"] = st.selectbox(
                         "Distribuzione Price",
@@ -148,8 +149,10 @@ for i, proj in enumerate(st.session_state.projects):
                     rev["quantity"][y]["p1"] = st.number_input("Quantity p1", value=rev["quantity"][y].get("p1",0.0), key=f"quantity_p1_{i}_{j}_{y}")
                     rev["quantity"][y]["p2"] = st.number_input("Quantity p2", value=rev["quantity"][y].get("p2",0.0), key=f"quantity_p2_{i}_{j}_{y}")
                 else:
-                    rev["price"][y]["value"] = st.number_input(f"Ricavo totale anno {y+1}", value=rev["price"][y].get("value",0.0), key=f"revenue_det_{i}_{j}_{y}")
-                    rev["quantity"][y]["value"] = 1.0  # quantità fittizia per ricavo totale
+                    # Deterministico: inserisci prezzo e quantità
+                    rev["price"][y]["p1"] = st.number_input(f"Prezzo anno {y+1}", value=rev["price"][y].get("p1",0.0), key=f"price_det_{i}_{j}_{y}")
+                    rev["quantity"][y]["p1"] = st.number_input(f"Quantità anno {y+1}", value=rev["quantity"][y].get("p1",1.0), key=f"quantity_det_{i}_{j}_{y}")
+
 
         # ------------------ Costi Variabili ------------------
         st.subheader("💸 Costi Variabili")
@@ -317,6 +320,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
