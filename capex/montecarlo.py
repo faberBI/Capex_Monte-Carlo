@@ -1,5 +1,3 @@
-## buono
-
 import numpy as np
 from .costs import compute_costs
 from capex.wacc import calculate_wacc
@@ -163,6 +161,7 @@ def calculate_yearly_financials(proj, wacc=0.0):
     return df, npv_medio
 
     
+
 
 
 
