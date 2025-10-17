@@ -303,10 +303,18 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
+# ------------------ Dettaglio finanziario per anno ------------------
 if st.session_state.results:
     for r in st.session_state.results:
+        # Recupera il progetto aggiornato dallo state UI
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        df_financials, npv_medio = calculate_yearly_financials(proj)
+        
+        # Calcola WACC
+        wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
+        
+        # Calcolo dei flussi annuali
+        df_financials, npv_medio = calculate_yearly_financials(proj, wacc=wacc)
+        
         st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
         st.dataframe(df_financials.style.format("{:.2f}"))
 
@@ -419,6 +427,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
