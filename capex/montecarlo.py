@@ -13,6 +13,8 @@ def run_montecarlo(proj, n_sim, wacc):
     Tasse = -(EBIT * tax) se EBIT>0, |EBIT*tax| se EBIT<0
     FCF = EBITDA + Tasse - CAPEX
 
+    Supporta ricavi deterministici o stocastici anno per anno.
+
     Args:
         proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
         n_sim (int): numero simulazioni
@@ -45,8 +47,7 @@ def run_montecarlo(proj, n_sim, wacc):
         dcf_per_year = []
 
         for year in range(years):
-            # CAPEX
-            # capex_init = proj["capex"] if year == 0 else 0
+            # CAPEX ricorrente
             capex_rec = proj.get("capex_rec", [0]*years)[year]
 
             # Costi fissi e ammortamenti
@@ -55,11 +56,24 @@ def run_montecarlo(proj, n_sim, wacc):
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
 
-            # Ricavi stocastici
-            total_revenue = sum(
-                sample(rev["price"], year) * sample(rev["quantity"], year)
-                for rev in proj["revenues_list"]
-            )
+            # --- Ricavi: supporto deterministico o stocastico ---
+            total_revenue = 0
+            for rev in proj["revenues_list"]:
+                # Price
+                price_obj = rev["price"][year]
+                if price_obj.get("type", "stocastico") == "deterministico":
+                    price_val = price_obj.get("value", 0.0)
+                else:
+                    price_val = sample(price_obj, year)
+                
+                # Quantity
+                qty_obj = rev["quantity"][year]
+                if qty_obj.get("type", "stocastico") == "deterministico":
+                    qty_val = qty_obj.get("value", 0.0)
+                else:
+                    qty_val = sample(qty_obj, year)
+                
+                total_revenue += price_val * qty_val
 
             # Costi variabili e aggiuntivi
             var_cost = total_revenue * proj["costs"]["var_pct"]
@@ -117,7 +131,7 @@ def run_montecarlo(proj, n_sim, wacc):
 
     return {
         "npv_array": npv_array,
-        "yearly_cash_flows": yearly_dcf,  # adesso contiene i DCF attualizzati
+        "yearly_cash_flows": yearly_dcf,  # contiene i DCF attualizzati
         "npv_cum_matrix": npv_cum_matrix,
         "expected_npv": np.mean(npv_array),
         "car": car_5pct,
@@ -129,7 +143,6 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
-
 
 # ------------------ Funzione sample per stocasticità ------------------
 def sample(dist_obj, year_idx=None):
