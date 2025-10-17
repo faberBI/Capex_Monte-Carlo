@@ -303,13 +303,13 @@ if st.button("▶️ Avvia simulazioni"):
 
     st.session_state.results = results
 
-# if st.session_state.results:
-#    for r in st.session_state.results:
-#        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-#        df_financials, npv_medio = calculate_yearly_financials(proj)
+ if st.session_state.results:
+    for r in st.session_state.results:
+        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
+        df_financials, npv_medio = calculate_yearly_financials(proj)
         
-#        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
-#        st.dataframe(df_financials.style.format("{:.2f}"))
+        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
+        st.dataframe(df_financials.style.format("{:.2f}"))
 
 
 
@@ -420,6 +420,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
