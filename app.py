@@ -206,9 +206,13 @@ if st.session_state.results:
     for r in st.session_state.results:
         proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
-        df_financials, npv_medio = calculate_yearly_financials(proj, wacc=wacc)
-        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
-        st.dataframe(df_financials.style.format("{:.2f}"))
+        try:
+            df_financials, npv_medio = calculate_yearly_financials(proj, wacc=wacc)
+            st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
+            st.dataframe(df_financials.style.format("{:.2f}"))
+        except Exception as e:
+            st.error(f"Errore nel calcolo dei dettagli finanziari per {proj['name']}")
+            st.write(str(e))
 
 
 
@@ -320,6 +324,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
