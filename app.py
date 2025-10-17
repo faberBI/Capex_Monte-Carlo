@@ -17,6 +17,7 @@ from capex.visuals import (
     plot_probs_kri
 )
 
+# ------------------ API Key ------------------
 api_key = st.secrets["OPENAI_API_KEY"]
 
 # ------------------ Session state ------------------
@@ -25,7 +26,7 @@ if "projects" not in st.session_state:
 if "results" not in st.session_state:
     st.session_state.results = None
 
-# ------------------ Funzione per aggiungere progetto ------------------
+# ------------------ Funzione aggiungi progetto ------------------
 def add_project():
     st.session_state.projects.append({
         "name": f"Progetto {len(st.session_state.projects)+1}",
@@ -36,20 +37,21 @@ def add_project():
         "tax": 0.30,
         "capex": 200.0,
         "years": 10,
-        "capex_rec": None,  # ora fissi anno per anno
-        "fixed_costs": None,  # ora fissi anno per anno
+        "capex_rec": [0.0]*10,
+        "fixed_costs": [0.0]*10,
         "revenues_list": [
             {
                 "name": "Ricavo 1",
-                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0} for _ in range(10)],
-                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(10)]
+                "price": [{"is_stochastic": True, "dist": "Normale", "p1": 100.0, "p2": 10.0, "value": 0.0} for _ in range(10)],
+                "quantity": [{"is_stochastic": True, "dist": "Normale", "p1": 1000.0, "p2": 100.0, "value": 0.0} for _ in range(10)]
             }
         ],
         "costs": {"var_pct": 0.08},
         "other_costs": [],
         "price_growth": [0.01]*10,
         "quantity_growth": [0.05]*10,
-        "depreciation": [20.0]*10
+        "depreciation": [20.0]*10,
+        "depreciation_0": 20.0
     })
 
 # ------------------ UI ------------------
@@ -70,40 +72,32 @@ for i, proj in enumerate(st.session_state.projects):
         proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
         proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
 
-        # ------------------ CAPEX Ricorrente (fisso anno per anno) ------------------
-        st.subheader("🏗️ CAPEX Ricorrente (anno per anno, valori fissi)")
+        # ------------------ CAPEX Ricorrente ------------------
+        st.subheader("🏗️ CAPEX Ricorrente")
         if proj.get("capex_rec") is None:
-            if st.button(f"➕ Aggiungi CAPEX Ricorrente", key=f"add_capex_rec_{i}"):
-                proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
+            proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
+        for y in range(proj["years"]):
+            proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
-        if proj.get("capex_rec") is not None:
-            for y in range(proj["years"]):
-                proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
-
-               # ------------------ Ricavi multipli con distribuzione / deterministico ------------------
-                st.subheader("📈 Ricavi")
+        # ------------------ Ricavi ------------------
+        st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
-            
-            # Assicuriamoci che price e quantity abbiano almeno 'years' elementi
             for key in ["price", "quantity"]:
                 while len(rev[key]) < proj["years"]:
                     rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0, "value": 0.0})
-        
+
             for y in range(proj["years"]):
-                st.markdown(f"Anno {y+1} - {rev['name']}")
-                
-                # Toggle stocastico / deterministico
+                st.markdown(f"Anno {y+1}")
                 is_stochastic = st.checkbox(
                     "Stocastico",
-                    value=rev["price"][y]["is_stochastic"] or rev["quantity"][y]["is_stochastic"],
+                    value=rev["price"][y].get("is_stochastic", True) or rev["quantity"][y].get("is_stochastic", True),
                     key=f"stochastic_{i}_{j}_{y}"
                 )
-                
                 if is_stochastic:
                     rev["price"][y]["is_stochastic"] = True
                     rev["quantity"][y]["is_stochastic"] = True
-            
+
                     # Price
                     dist_type = st.selectbox(
                         "Distribuzione Price",
@@ -111,10 +105,10 @@ for i, proj in enumerate(st.session_state.projects):
                         index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["price"][y].get("dist", "Normale")),
                         key=f"price_dist_{i}_{j}_{y}"
                     )
-                    rev["price"][y]["dist"] = dist_type
+                    rev["price"][y].update({"dist": dist_type})
                     rev["price"][y]["p1"] = st.number_input("Price p1", value=rev["price"][y].get("p1",0.0), key=f"price_p1_{i}_{j}_{y}")
                     rev["price"][y]["p2"] = st.number_input("Price p2", value=rev["price"][y].get("p2",0.0), key=f"price_p2_{i}_{j}_{y}")
-                
+
                     # Quantity
                     dist_type_q = st.selectbox(
                         "Distribuzione Quantity",
@@ -122,31 +116,19 @@ for i, proj in enumerate(st.session_state.projects):
                         index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["quantity"][y].get("dist", "Normale")),
                         key=f"quantity_dist_{i}_{j}_{y}"
                     )
-                    rev["quantity"][y]["dist"] = dist_type_q
+                    rev["quantity"][y].update({"dist": dist_type_q})
                     rev["quantity"][y]["p1"] = st.number_input("Quantity p1", value=rev["quantity"][y].get("p1",0.0), key=f"quantity_p1_{i}_{j}_{y}")
                     rev["quantity"][y]["p2"] = st.number_input("Quantity p2", value=rev["quantity"][y].get("p2",0.0), key=f"quantity_p2_{i}_{j}_{y}")
-                
                 else:
-                    # Deterministico: inserisci il ricavo totale direttamente
                     rev["price"][y]["is_stochastic"] = False
                     rev["quantity"][y]["is_stochastic"] = False
-                    rev["price"][y]["value"] = st.number_input(
-                        f"Ricavo totale anno {y+1}",
-                        value=rev["price"][y].get("value", 0.0),
-                        key=f"revenue_det_{i}_{j}_{y}"
-                    )
-                    # Impostiamo quantity a 1 per evitare moltiplicazioni
-                    rev["quantity"][y]["value"] = 1.0
-                
-                    
-                    
-        
-                    
-        # ------------------ Costi Variabili ------------------
+                    rev["price"][y]["value"] = st.number_input(f"Ricavo totale anno {y+1}", value=rev["price"][y].get("value", 0.0), key=f"revenue_det_{i}_{j}_{y}")
+                    rev["quantity"][y]["value"] = 1.0  # deterministico
+
+        # ------------------ Costi variabili e fissi ------------------
         st.subheader("💸 Costi Variabili")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
 
-        # ------------------ Costi Fissi anno per anno ------------------
         st.subheader("💸 Costi Fissi annui")
         if proj.get("fixed_costs") is None or len(proj["fixed_costs"]) != proj["years"]:
             proj["fixed_costs"] = [0.0]*proj["years"]
@@ -154,106 +136,38 @@ for i, proj in enumerate(st.session_state.projects):
             proj["fixed_costs"][y] = st.number_input(f"Costi fissi anno {y+1}", value=proj["fixed_costs"][y], key=f"fixed_{i}_{y}")
 
         # ------------------ Ammortamento ------------------
-        st.subheader("🏗️ Ammortamento (Depreciation)")
-
-        # Ammortamento iniziale anno 0
-        if "depreciation_0" not in proj:
-            proj["depreciation_0"] = proj["capex"]/proj["years"]  # default proporzionale al CAPEX
-
-        proj["depreciation_0"] = st.number_input(
-        f"Ammortamento anno 0 (iniziale) progetto {proj['name']}",
-        value=proj["depreciation_0"],
-        key=f"dep0_{i}"
-        )
-
-        # Ammortamento anno per anno
+        st.subheader("🏗️ Ammortamento")
+        proj["depreciation_0"] = st.number_input(f"Ammortamento anno 0", value=proj.get("depreciation_0", proj["capex"]/proj["years"]), key=f"dep0_{i}")
         if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
             proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
-
         df_dep = pd.DataFrame({"Anno": range(1, proj["years"]+1), "Ammortamento": proj["depreciation"]})
         df_dep_edit = st.data_editor(df_dep, key=f"dep_{i}", num_rows="dynamic")
         proj["depreciation"] = df_dep_edit["Ammortamento"].tolist()
 
-        # ------------------ Costi aggiuntivi stocastici ------------------
-        st.subheader("📉 Costi aggiuntivi")
-        proj.setdefault("other_costs", [])
-        for j, cost in enumerate(proj["other_costs"]):
-            st.markdown(f"**{cost['name']}**")
-            for year_idx in range(proj["years"]):
-                st.markdown(f"Anno {year_idx+1}")
-                year_cost = cost["values"][year_idx]
-                dist_options = ["Normale", "Triangolare", "Lognormale", "Uniforme"]
-                selected_dist = st.selectbox(
-                    f"Distribuzione anno {year_idx+1} - {cost['name']}",
-                    options=dist_options,
-                    index=dist_options.index(year_cost.get("dist", "Normale")),
-                    key=f"oc_dist_{i}_{j}_{year_idx}"
-                )
-                year_cost["dist"] = selected_dist
-                if selected_dist == "Normale":
-                    year_cost["p1"] = st.number_input(f"Media (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_n_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Std Dev (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_n_p2_{i}_{j}_{year_idx}")
-                elif selected_dist == "Triangolare":
-                    year_cost["p1"] = st.number_input(f"Minimo (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_t_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Modalità (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_t_p2_{i}_{j}_{year_idx}")
-                    year_cost["p3"] = st.number_input(f"Massimo (p3) anno {year_idx+1}", value=year_cost.get("p3",0.0), key=f"oc_t_p3_{i}_{j}_{year_idx}")
-                elif selected_dist == "Lognormale":
-                    year_cost["p1"] = st.number_input(f"Mu (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_l_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Sigma (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_l_p2_{i}_{j}_{year_idx}")
-                elif selected_dist == "Uniforme":
-                    year_cost["p1"] = st.number_input(f"Min (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Max (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{year_idx}")
-        if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
-            proj["other_costs"].append({
-                "name": f"Costo {len(proj['other_costs'])+1}",
-                "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
-            })
-
         # ------------------ Trend annuali ------------------
         st.subheader("📊 Trend annuali")
-        
-        # Assicuriamoci che le liste abbiano almeno 'years' elementi
-        proj.setdefault("price_growth", [0.0] * proj["years"])
-        proj.setdefault("quantity_growth", [0.0] * proj["years"])
-        
-        while len(proj["price_growth"]) < proj["years"]:
-            proj["price_growth"].append(0.0)
-        while len(proj["quantity_growth"]) < proj["years"]:
-            proj["quantity_growth"].append(0.0)
-        
+        proj.setdefault("price_growth", [0.0]*proj["years"])
+        proj.setdefault("quantity_growth", [0.0]*proj["years"])
         for t in range(proj["years"]):
-            proj["price_growth"][t] = st.slider(
-                f"Crescita prezzo anno {t+1} (%)", 
-                -0.5, 0.5, 
-                proj["price_growth"][t], 
-                0.05, 
-                key=f"pg_{i}_{t}"
-            )
-            proj["quantity_growth"][t] = st.slider(
-                f"Crescita quantità anno {t+1} (%)", 
-                -0.5, 0.5, 
-                proj["quantity_growth"][t], 
-                0.05, 
-                key=f"qg_{i}_{t}"
-            )
+            proj["price_growth"][t] = st.slider(f"Crescita prezzo anno {t+1} (%)", -0.5, 0.5, proj["price_growth"][t], 0.05, key=f"pg_{i}_{t}")
+            proj["quantity_growth"][t] = st.slider(f"Crescita quantità anno {t+1} (%)", -0.5, 0.5, proj["quantity_growth"][t], 0.05, key=f"qg_{i}_{t}")
 
         # WACC
         wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
         st.write(f"**WACC calcolato:** {wacc:.2%}")
 
-# ------------------ Funzione Monte Carlo aggiornata ------------------
+# ------------------ Funzione di campionamento stocastico ------------------
 def sample(dist_obj, year_idx=None):
-    """Campionamento stocastico solo per other_costs o ricavi stocastici."""
-    # Se è una lista, seleziona anno
     if isinstance(dist_obj, list):
         if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
+            raise ValueError("year_idx deve essere specificato per liste")
         dist_obj = dist_obj[year_idx]
 
+    if not dist_obj.get("is_stochastic", True):
+        return dist_obj.get("value", 0.0)
+
     dist_type = dist_obj.get("dist", "Normale")
-    p1 = dist_obj.get("p1", 0.0)
-    p2 = dist_obj.get("p2", 0.0)
-    p3 = dist_obj.get("p3", p1 + p2)
+    p1, p2, p3 = dist_obj.get("p1", 0.0), dist_obj.get("p2", 0.0), dist_obj.get("p3", dist_obj.get("p1",0.0)+dist_obj.get("p2",0.0))
     
     if dist_type == "Normale":
         return np.random.normal(p1, p2)
@@ -265,7 +179,6 @@ def sample(dist_obj, year_idx=None):
         return np.random.uniform(p1, p2)
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
-
 
 # ------------------ Avvio simulazioni ------------------
 if st.button("▶️ Avvia simulazioni"):
@@ -282,14 +195,11 @@ if st.button("▶️ Avvia simulazioni"):
         st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
         st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
 
-        # ------------------ Grafici classici ------------------
-        st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
-                                        np.percentile(sim_result["npv_array"], 5), proj["name"]))
+        st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], np.percentile(sim_result["npv_array"], 5), proj["name"]))
         st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
         st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
         st.plotly_chart(plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]), use_container_width=True)
 
-        # ------------------ KRI corretto ------------------
         kri_pct = (sim_result["expected_npv"] - sim_result["car"]) / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
         kri_pct = np.clip(kri_pct, 0, 1)
         kri_text = "🔴 Rischio Alto" if kri_pct > 0.5 else ("🟡 Rischio Medio" if kri_pct > 0.25 else "🟢 Rischio Basso")
@@ -299,19 +209,15 @@ if st.button("▶️ Avvia simulazioni"):
         kri_probs_text = "🔴 Rischio Alto" if sim_result['downside_prob']> 0.07 else ("🟡 Rischio Medio" if sim_result['downside_prob'] > 0.05 else "🟢 Rischio Basso")
         st.markdown(f"**KRI sintetico on probs:** {kri_probs_text}")
 
-        # ------------------ NPV cumulato e Payback ------------------
-        npv_cum_matrix = np.cumsum(sim_result['yearly_cash_flows'], axis=1)  # cumulativo anno per anno
+        npv_cum_matrix = np.cumsum(sim_result['yearly_cash_flows'], axis=1)
         sim_result['npv_cum_matrix'] = npv_cum_matrix
-
-        # PBP mediana (anno in cui NPV mediano diventa positivo)
         median_cum_npv = np.median(npv_cum_matrix, axis=0)
-        pbp_median = np.argmax(median_cum_npv > 0) + 1  # +1 perché gli anni partono da 1
+        pbp_median = np.argmax(median_cum_npv > 0) + 1
         st.write(f"**PBP attualizzato medio (mediana NPV):** {pbp_median} anni")
-
-        # Grafico NPV cumulato a serie storica
         st.pyplot(plot_cumulative_npv(npv_cum_matrix, proj['name']))
 
     st.session_state.results = results
+
 
 # ------------------ Dettaglio finanziario per anno ------------------
 if st.session_state.results:
@@ -437,6 +343,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
