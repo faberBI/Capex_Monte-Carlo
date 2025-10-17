@@ -147,7 +147,6 @@ def sample(dist_obj, year_idx=None):
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 
-
 def calculate_yearly_financials(proj):
     """
     Calcolo dei flussi finanziari anno per anno per un progetto CAPEX,
@@ -165,6 +164,8 @@ def calculate_yearly_financials(proj):
     import pandas as pd
 
     years = proj["years"]
+    wacc = proj.get("wacc", 0.1)
+
     df = pd.DataFrame({"Anno": range(1, years + 1)})
 
     revenues_total = []
@@ -235,9 +236,13 @@ def calculate_yearly_financials(proj):
     df["Tasse"] = taxes_list
     df["FCF"] = fcf_list
 
-    npv_medio = np.npv(proj.get("wacc", 0.1), fcf_list)  # NPV medio usando WACC del progetto
+    # --- NPV medio ---
+    fcf_array = np.array(fcf_list)
+    npv_medio = np.sum(fcf_array / ((1 + wacc) ** np.arange(1, years + 1)))
 
     return df, npv_medio
+
+
 
 
 
