@@ -112,16 +112,15 @@ def calculate_yearly_financials(proj, wacc=0.0):
     for year in range(years):
         total_revenue = 0.0
         for rev in proj["revenues_list"]:
-            price_obj = rev["price"][year]
-            quantity_obj = rev["quantity"][year]
-
-            if not price_obj.get("is_stochastic", False) and not quantity_obj.get("is_stochastic", False):
-                revenue_year = price_obj.get("value", 0.0)
+            if not rev["price"][year]["is_stochastic"]:
+                # Deterministico: usa p1 * q1
+                price_val = rev["price"][year].get("p1", 0.0)
+                quantity_val = rev["quantity"][year].get("p1", 1.0)
             else:
-                price_val = sample(price_obj, year) if price_obj.get("is_stochastic", False) else price_obj.get("value", 0.0)
-                quantity_val = sample(quantity_obj, year) if quantity_obj.get("is_stochastic", False) else quantity_obj.get("value", 0.0)
-                revenue_year = price_val * quantity_val
-
+                # Stocastico: campiona
+                price_val = sample(rev["price"][year], year)
+                quantity_val = sample(rev["quantity"][year], year)
+            revenue_year = price_val * quantity_val
             total_revenue += revenue_year
 
         revenues_total.append(total_revenue)
@@ -141,15 +140,16 @@ def calculate_yearly_financials(proj, wacc=0.0):
         ebit = ebitda - ammortamenti_tot
         ebit_list.append(ebit)
 
-        taxes = -ebit * proj["tax"] if ebit >= 0 else -(-ebit * proj["tax"])
+        taxes = -ebit * proj["tax"] if ebit >=0 else -(-ebit * proj["tax"])
         taxes_list.append(taxes)
 
         capex_rec = proj.get("capex_rec", [0]*years)[year]
         fcf = ebitda + taxes - capex_rec
         fcf_list.append(fcf)
 
+    # Creazione DataFrame
     df = pd.DataFrame({
-        "Anno": list(range(1, years + 1)),
+        "Anno": list(range(1, years+1)),
         "Ricavi": revenues_total,
         "EBITDA": ebitda_list,
         "EBIT": ebit_list,
@@ -157,9 +157,13 @@ def calculate_yearly_financials(proj, wacc=0.0):
         "FCF": fcf_list
     })
 
-    npv_medio = sum(fcf / ((1 + wacc) ** (year + 1)) for year, fcf in enumerate(fcf_list))
+    # NPV medio
+    npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
+
     return df, npv_medio
+
     
+
 
 
 
