@@ -80,7 +80,7 @@ for i, proj in enumerate(st.session_state.projects):
             for y in range(proj["years"]):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
-                # ------------------ Ricavi multipli con distribuzione / deterministico ------------------
+               # ------------------ Ricavi multipli con distribuzione / deterministico ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
@@ -88,73 +88,49 @@ for i, proj in enumerate(st.session_state.projects):
                 # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
                     rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0})
-        
+                
                 for y in range(proj["years"]):
                     st.markdown(f"Anno {y+1} - {key}")
-        
+                
                     # Toggle deterministico / stocastico
-                    rev[key][y].setdefault("is_stochastic", True)
-                    state_checkbox_key = f"{proj['name']}_{rev['name']}_{key}_{y}_stochastic"
                     is_stochastic = st.checkbox(
                         "Stocastico",
-                        value=st.session_state.get(state_checkbox_key, rev[key][y]["is_stochastic"]),
-                        key=state_checkbox_key
+                        value=rev[key][y].get("is_stochastic", True),
+                        key=f"{key}_stochastic_{i}_{j}_{y}"
                     )
                     rev[key][y]["is_stochastic"] = is_stochastic
-                    st.session_state[state_checkbox_key] = is_stochastic  # salva nello state
-        
+                
                     if is_stochastic:
-                        dist_options = ["Normale", "Triangolare", "Lognormale", "Uniforme"]
-                        state_dist_key = f"{proj['name']}_{rev['name']}_{key}_{y}_dist"
                         dist_type = st.selectbox(
                             "Distribuzione",
-                            dist_options,
-                            index=dist_options.index(st.session_state.get(state_dist_key, rev[key][y].get("dist","Normale"))),
-                            key=state_dist_key
+                            ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
+                            key=f"{key}_dist_{i}_{j}_{y}"
                         )
                         rev[key][y]["dist"] = dist_type
-                        st.session_state[state_dist_key] = dist_type
-        
+                    
+                        # Parametri distribuzioni
                         if dist_type == "Normale":
-                            p1_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p1"
-                            p2_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p2"
-                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=st.session_state.get(p1_key, rev[key][y].get("p1",0.0)), key=p1_key)
-                            rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=st.session_state.get(p2_key, rev[key][y].get("p2",0.0)), key=p2_key)
-                            st.session_state[p1_key] = rev[key][y]["p1"]
-                            st.session_state[p2_key] = rev[key][y]["p2"]
+                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                         elif dist_type == "Triangolare":
-                            p1_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p1"
-                            p2_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p2"
-                            p3_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p3"
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=st.session_state.get(p1_key, rev[key][y].get("p1",0.0)), key=p1_key)
-                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=st.session_state.get(p2_key, rev[key][y].get("p2",0.0)), key=p2_key)
-                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=st.session_state.get(p3_key, rev[key][y].get("p3",0.0)), key=p3_key)
-                            st.session_state[p1_key] = rev[key][y]["p1"]
-                            st.session_state[p2_key] = rev[key][y]["p2"]
-                            st.session_state[p3_key] = rev[key][y]["p3"]
+                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
                         elif dist_type == "Lognormale":
-                            p1_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p1"
-                            p2_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p2"
-                            rev[key][y]["p1"] = st.number_input("Media log (p1)", value=st.session_state.get(p1_key, rev[key][y].get("p1",0.0)), key=p1_key)
-                            rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=st.session_state.get(p2_key, rev[key][y].get("p2",0.0)), key=p2_key)
-                            st.session_state[p1_key] = rev[key][y]["p1"]
-                            st.session_state[p2_key] = rev[key][y]["p2"]
+                            rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                         elif dist_type == "Uniforme":
-                            p1_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p1"
-                            p2_key = f"{proj['name']}_{rev['name']}_{key}_{y}_p2"
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=st.session_state.get(p1_key, rev[key][y].get("p1",0.0)), key=p1_key)
-                            rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=st.session_state.get(p2_key, rev[key][y].get("p2",0.0)), key=p2_key)
-                            st.session_state[p1_key] = rev[key][y]["p1"]
-                            st.session_state[p2_key] = rev[key][y]["p2"]
+                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                     else:
-                        # Deterministico: input diretto
-                        value_key = f"{proj['name']}_{rev['name']}_{key}_{y}_det"
+                        # Deterministico: solo un campo numerico
                         rev[key][y]["value"] = st.number_input(
                             f"Valore deterministico anno {y+1}",
-                            value=st.session_state.get(value_key, rev[key][y].get("value", 0.0)),
-                            key=value_key
+                            value=rev[key][y].get("value", 0.0),
+                            key=f"{key}_det_{i}_{j}_{y}"
                         )
-                        st.session_state[value_key] = rev[key][y]["value"]
+                    
         
                     
         # ------------------ Costi Variabili ------------------
@@ -452,6 +428,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
