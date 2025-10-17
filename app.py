@@ -80,46 +80,57 @@ for i, proj in enumerate(st.session_state.projects):
             for y in range(proj["years"]):
                 proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
 
-        # ------------------ Ricavi multipli con distribuzione ------------------
+        # ------------------ Ricavi multipli con distribuzione / deterministico ------------------
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
             for key in ["price", "quantity"]:
                 # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
-                    rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
+                    rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0})
         
                 for y in range(proj["years"]):
                     st.markdown(f"Anno {y+1} - {key}")
-                    dist_type = st.selectbox(
-                        "Distribuzione",
-                        ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                        index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
-                        key=f"{key}_dist_{i}_{j}_{y}"
+        
+                    # Toggle deterministico / stocastico
+                    rev[key][y].setdefault("is_stochastic", True)
+                    is_stochastic = st.checkbox(
+                        "Stocastico?",
+                        value=rev[key][y]["is_stochastic"],
+                        key=f"{key}_stochastic_{i}_{j}_{y}"
                     )
-                    rev[key][y]["dist"] = dist_type
+                    rev[key][y]["is_stochastic"] = is_stochastic
         
-                    if dist_type == "Normale":
-                        rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    elif dist_type == "Triangolare":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
-                    elif dist_type == "Lognormale":
-                        rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    elif dist_type == "Uniforme":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                    if is_stochastic:
+                        dist_type = st.selectbox(
+                            "Distribuzione",
+                            ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
+                            key=f"{key}_dist_{i}_{j}_{y}"
+                        )
+                        rev[key][y]["dist"] = dist_type
         
-        # Pulsante per aggiungere nuova voce di ricavo
-        if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
-            proj["revenues_list"].append({
-                "name": f"Ricavo {len(proj['revenues_list']) + 1}",
-                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0} for _ in range(proj["years"])],
-                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(proj["years"])]
-            })
+                        if dist_type == "Normale":
+                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        elif dist_type == "Triangolare":
+                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
+                        elif dist_type == "Lognormale":
+                            rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        elif dist_type == "Uniforme":
+                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
+                            rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                    else:
+                        # Deterministico: solo un campo numerico
+                        rev[key][y]["value"] = st.number_input(
+                            f"Valore deterministico anno {y+1}",
+                            value=rev[key][y].get("value", 0.0),
+                            key=f"{key}_det_{i}_{j}_{y}"
+                        )
+        
 
         # ------------------ Costi Variabili ------------------
         st.subheader("💸 Costi Variabili")
@@ -222,12 +233,17 @@ for i, proj in enumerate(st.session_state.projects):
 
 # ------------------ Funzione Monte Carlo aggiornata ------------------
 def sample(dist_obj, year_idx=None):
-    """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
+    """Campionamento stocastico solo per other_costs o ricavi. Se deterministico, restituisce il valore fisso."""
     # Se è una lista, seleziona anno
     if isinstance(dist_obj, list):
         if year_idx is None:
             raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
         dist_obj = dist_obj[year_idx]
+
+    # Se deterministico
+    if dist_obj.get("is_stochastic") is False:
+        return dist_obj.get("value", 0.0)
+
     dist_type = dist_obj.get("dist", "Normale")
     p1 = dist_obj.get("p1", 0.0)
     p2 = dist_obj.get("p2", 0.0)
@@ -406,6 +422,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
