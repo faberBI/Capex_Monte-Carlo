@@ -148,18 +148,6 @@ def sample(dist_obj, year_idx=None):
 
 
 def calculate_yearly_financials(proj):
-    """
-    Calcolo dei flussi finanziari anno per anno per un progetto CAPEX,
-    considerando ricavi deterministici o stocastici, costi variabili, costi fissi,
-    ammortamenti e CAPEX ricorrente.
-
-    Args:
-        proj (dict): progetto con info (capex, ricavi, costi, ammortamenti)
-
-    Returns:
-        df_financials (pd.DataFrame): DataFrame con flussi anno per anno
-        npv_medio (float): NPV medio calcolato su flussi deterministici
-    """
     import numpy as np
     import pandas as pd
 
@@ -178,52 +166,58 @@ def calculate_yearly_financials(proj):
     fcf_list = []
 
     for year in range(years):
-        # --- Ricavi ---
         total_revenue = 0.0
-        for rev in proj["revenues_list"]:
-            for key in ["price", "quantity"]:
-                val_obj = rev[key][year]
-                if val_obj.get("type", "stocastico") == "deterministico":
-                    val = val_obj.get("value", 0.0)
-                else:
-                    val = sample(val_obj, year)
-                if key == "price":
-                    price_val = val
-                else:
-                    quantity_val = val
+        for rev in proj.get("revenues_list", []):
+            price_obj = rev["price"][year] if year < len(rev["price"]) else {"type": "deterministico", "value": 0.0}
+            quantity_obj = rev["quantity"][year] if year < len(rev["quantity"]) else {"type": "deterministico", "value": 0.0}
+
+            # prezzo
+            if price_obj.get("type", "stocastico") == "deterministico":
+                price_val = price_obj.get("value", 0.0)
+            else:
+                price_val = sample(price_obj, year)
+
+            # quantità
+            if quantity_obj.get("type", "stocastico") == "deterministico":
+                quantity_val = quantity_obj.get("value", 0.0)
+            else:
+                quantity_val = sample(quantity_obj, year)
+
             total_revenue += price_val * quantity_val
+
         revenues_total.append(total_revenue)
 
-        # --- Costi variabili ---
-        var_cost = total_revenue * proj["costs"]["var_pct"]
+        # Costi variabili
+        var_pct = proj.get("costs", {}).get("var_pct", 0.0)
+        var_cost = total_revenue * var_pct
         var_costs_total.append(var_cost)
 
-        # --- Costi fissi ---
-        fixed_cost = proj.get("fixed_costs", [0]*years)[year]
+        # Costi fissi
+        fixed_cost = proj.get("fixed_costs", [0.0]*years)[year]
         fixed_costs_total.append(fixed_cost)
 
-        # --- Ammortamenti ---
-        depreciation = proj.get("depreciation", [0]*years)[year]
+        # Ammortamenti
+        depreciation = proj.get("depreciation", [0.0]*years)[year]
         depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
         ammortamenti_tot = depreciation + depreciation_0
         depreciation_total.append(ammortamenti_tot)
 
-        # --- EBITDA ---
+        # EBITDA
         ebitda = total_revenue - var_cost - fixed_cost
         ebitda_list.append(ebitda)
 
-        # --- EBIT ---
+        # EBIT
         ebit = ebitda - ammortamenti_tot
         ebit_list.append(ebit)
 
-        # --- Tasse ---
-        taxes = -ebit * proj["tax"]
+        # Tasse
+        taxes = -ebit * proj.get("tax", 0.3)
         if ebit < 0:
             taxes = -taxes
         taxes_list.append(taxes)
 
-        # --- FCF ---
-        capex_rec = proj.get("capex_rec", [0]*years)[year]
+        # FCF
+        capex_rec = proj.get("capex_rec", [0.0]*years)[year]
         fcf = ebitda + taxes - capex_rec
         fcf_list.append(fcf)
 
@@ -236,11 +230,13 @@ def calculate_yearly_financials(proj):
     df["Tasse"] = taxes_list
     df["FCF"] = fcf_list
 
-    # --- NPV medio ---
+    # NPV medio
     fcf_array = np.array(fcf_list)
     npv_medio = np.sum(fcf_array / ((1 + wacc) ** np.arange(1, years + 1)))
 
     return df, npv_medio
+
+
 
 
 
