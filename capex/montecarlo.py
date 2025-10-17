@@ -155,8 +155,10 @@ def calculate_yearly_financials(proj):
     def get_rev_value(rev_component, year):
         val_obj = rev_component[year]
         if val_obj.get("mode", "Stocastico") == "Deterministico":
+            # Prendi direttamente il valore deterministico
             return val_obj.get("value", 0.0)
         else:
+            # Stocastico: usa la funzione sample
             return sample(val_obj)
 
     revenues = []
@@ -174,22 +176,29 @@ def calculate_yearly_financials(proj):
             for rev in proj["revenues_list"]
         )
         revenues.append(total_revenue)
+        
         var_cost = total_revenue * proj["costs"]["var_pct"]
         var_costs.append(var_cost)
+        
         fixed_cost = proj.get("fixed_costs", [0]*years)[year]
         fixed_costs.append(fixed_cost)
+        
         other_cost_total = sum(sample(cost.get("values", None), year) for cost in proj.get("other_costs", []))
         other_costs.append(other_cost_total)
+        
         ebitda = total_revenue - var_cost - fixed_cost - other_cost_total
         ebitda_list.append(ebitda)
+        
         depreciation = proj.get("depreciation", [0]*years)[year]
         depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
         ebit = ebitda - (depreciation + depreciation_0)
         ebit_list.append(ebit)
+        
         taxes = -ebit * proj["tax"]
         if ebit < 0:
             taxes = -taxes
         taxes_list.append(taxes)
+        
         capex_rec = proj.get("capex_rec", [0]*years)[year]
         fcf = ebitda + taxes - capex_rec
         fcf_list.append(fcf)
@@ -204,5 +213,7 @@ def calculate_yearly_financials(proj):
     df["FCF"] = fcf_list
 
     return df, np.mean(fcf_list)
+
+
 
 
