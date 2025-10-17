@@ -84,54 +84,86 @@ for i, proj in enumerate(st.session_state.projects):
         st.subheader("📈 Ricavi")
         for j, rev in enumerate(proj["revenues_list"]):
             st.markdown(f"**{rev['name']}**")
+            
+            # Assicuriamoci che la lista abbia almeno 'years' elementi per price e quantity
             for key in ["price", "quantity"]:
-                # Assicuriamoci che la lista abbia almeno 'years' elementi
                 while len(rev[key]) < proj["years"]:
                     rev[key].append({"is_stochastic": True, "dist": "Normale", "p1": 0.0, "p2": 0.0})
-        
-                for y in range(proj["years"]):
-                    st.markdown(f"Anno {y+1} - {key}")
-        
-                    # Toggle deterministico / stocastico
-                    rev[key][y].setdefault("is_stochastic", True)
-                    is_stochastic = st.checkbox(
-                        "Stocastico",
-                        value=rev[key][y]["is_stochastic"],
-                        key=f"{key}_stochastic_{i}_{j}_{y}"
+            
+            for y in range(proj["years"]):
+                st.markdown(f"Anno {y+1}")
+                
+                # Checkbox: Deterministico totale?
+                is_total_deterministic = st.checkbox(
+                    "Ricavo deterministico totale",
+                    value="total_value" in rev and rev.get("total_value") is not None,
+                    key=f"det_total_{i}_{j}_{y}"
+                )
+                
+                if is_total_deterministic:
+                    # Unico campo valore totale
+                    rev["total_value"] = st.number_input(
+                        f"Ricavo totale anno {y+1}",
+                        value=rev.get("total_value", 0.0),
+                        key=f"total_val_{i}_{j}_{y}"
                     )
-                    rev[key][y]["is_stochastic"] = is_stochastic
-        
-                    if is_stochastic:
+                else:
+                    # Price
+                    rev["price"][y].setdefault("is_stochastic", True)
+                    is_price_stochastic = st.checkbox(
+                        "Price stocastico",
+                        value=rev["price"][y]["is_stochastic"],
+                        key=f"price_stochastic_{i}_{j}_{y}"
+                    )
+                    rev["price"][y]["is_stochastic"] = is_price_stochastic
+                
+                    if is_price_stochastic:
                         dist_type = st.selectbox(
-                            "Distribuzione",
+                            "Distribuzione Price",
                             ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
-                            key=f"{key}_dist_{i}_{j}_{y}"
+                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["price"][y].get("dist", "Normale")),
+                            key=f"price_dist_{i}_{j}_{y}"
                         )
-                        rev[key][y]["dist"] = dist_type
-        
-                        if dist_type == "Normale":
-                            rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        elif dist_type == "Triangolare":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                            rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
-                        elif dist_type == "Lognormale":
-                            rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        elif dist_type == "Uniforme":
-                            rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                            rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
+                        rev["price"][y]["dist"] = dist_type
+                        rev["price"][y]["p1"] = st.number_input("p1", value=rev["price"][y].get("p1", 0.0), key=f"price_p1_{i}_{j}_{y}")
+                        rev["price"][y]["p2"] = st.number_input("p2", value=rev["price"][y].get("p2", 0.0), key=f"price_p2_{i}_{j}_{y}")
+                        if dist_type == "Triangolare":
+                            rev["price"][y]["p3"] = st.number_input("p3", value=rev["price"][y].get("p3", 0.0), key=f"price_p3_{i}_{j}_{y}")
                     else:
-                        # Deterministico: solo un campo numerico
-                        rev[key][y]["value"] = st.number_input(
-                            f"Valore deterministico anno {y+1}",
-                            value=rev[key][y].get("value", 0.0),
-                            key=f"{key}_det_{i}_{j}_{y}"
+                        rev["price"][y]["value"] = st.number_input(
+                            f"Valore deterministico Price anno {y+1}",
+                            value=rev["price"][y].get("value", 0.0),
+                            key=f"price_det_{i}_{j}_{y}"
                         )
-        
-
+                    
+                    # Quantity
+                    rev["quantity"][y].setdefault("is_stochastic", True)
+                    is_qty_stochastic = st.checkbox(
+                        "Quantity stocastica",
+                        value=rev["quantity"][y]["is_stochastic"],
+                        key=f"qty_stochastic_{i}_{j}_{y}"
+                    )
+                    rev["quantity"][y]["is_stochastic"] = is_qty_stochastic
+                
+                    if is_qty_stochastic:
+                        dist_type = st.selectbox(
+                            "Distribuzione Quantity",
+                            ["Normale", "Triangolare", "Lognormale", "Uniforme"],
+                            index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev["quantity"][y].get("dist", "Normale")),
+                            key=f"qty_dist_{i}_{j}_{y}"
+                        )
+                        rev["quantity"][y]["dist"] = dist_type
+                        rev["quantity"][y]["p1"] = st.number_input("p1", value=rev["quantity"][y].get("p1", 0.0), key=f"qty_p1_{i}_{j}_{y}")
+                        rev["quantity"][y]["p2"] = st.number_input("p2", value=rev["quantity"][y].get("p2", 0.0), key=f"qty_p2_{i}_{j}_{y}")
+                        if dist_type == "Triangolare":
+                            rev["quantity"][y]["p3"] = st.number_input("p3", value=rev["quantity"][y].get("p3", 0.0), key=f"qty_p3_{i}_{j}_{y}")
+                    else:
+                        rev["quantity"][y]["value"] = st.number_input(
+                            f"Valore deterministico Quantity anno {y+1}",
+                            value=rev["quantity"][y].get("value", 1.0),
+                            key=f"qty_det_{i}_{j}_{y}"
+                        )
+                    
         # ------------------ Costi Variabili ------------------
         st.subheader("💸 Costi Variabili")
         proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
@@ -427,6 +459,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
