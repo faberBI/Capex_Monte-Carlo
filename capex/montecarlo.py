@@ -181,46 +181,39 @@ def sample(dist_obj, year_idx=None):
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
-def calculate_yearly_financials(proj, wacc):
+ancials(proj, wacc):
     """
-    Calcola i flussi di cassa annuali e NPV attualizzato per un progetto CAPEX.
-    
+    Calcola i flussi di cassa annuali e i ricavi/EBITDA/FCF anno per anno
+    per un progetto CAPEX, gestendo ricavi stocastici o deterministici.
+
     Args:
-        proj (dict): progetto con informazioni su ricavi, costi, ammortamenti, CAPEX
-        wacc (float): tasso di sconto annuo
-        
+        proj (dict): progetto con info su ricavi, costi, ammortamenti, CAPEX
+        wacc (float): tasso di sconto WACC
+
     Returns:
         tuple: (DataFrame dettagli annuali, NPV medio attualizzato)
     """
     years = proj["years"]
-    
+
     revenues_total = []
     ebitda_list = []
     ebit_list = []
     taxes_list = []
     fcf_list = []
-    discounted_fcf_list = []
+    fcf_discounted_list = []
 
     for year in range(years):
         # --- Ricavi ---
         total_revenue = 0.0
         for rev in proj["revenues_list"]:
-            # Price
-            if rev["price"][year]["is_stochastic"]:
-                price_val = sample(rev["price"][year], year)
-            else:
-                price_val = rev["price"][year].get("value", 0.0)
-            
-            # Quantity
-            if rev["quantity"][year]["is_stochastic"]:
-                quantity_val = sample(rev["quantity"][year], year)
-            else:
-                quantity_val = 1
-
-            # Ricavo totale
+            # Deterministico
             if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
-                revenue_year = price_val  # valore già totale
+                revenue_year = rev["price"][year].get("value", 0.0)
             else:
+                # Price
+                price_val = sample(rev["price"][year], year) if rev["price"][year]["is_stochastic"] else rev["price"][year].get("value", 0.0)
+                # Quantity
+                quantity_val = sample(rev["quantity"][year], year) if rev["quantity"][year]["is_stochastic"] else rev["quantity"][year].get("value", 1.0)
                 revenue_year = price_val * quantity_val
 
             total_revenue += revenue_year
@@ -250,7 +243,7 @@ def calculate_yearly_financials(proj, wacc):
         # --- Tasse ---
         taxes = -ebit * proj["tax"]
         if ebit < 0:
-            taxes = -taxes
+            taxes = -taxes  # beneficio fiscale
         taxes_list.append(taxes)
 
         # --- FCF ---
@@ -259,8 +252,8 @@ def calculate_yearly_financials(proj, wacc):
         fcf_list.append(fcf)
 
         # --- FCF attualizzato ---
-        discounted_fcf = fcf / ((1 + wacc) ** (year + 1))
-        discounted_fcf_list.append(discounted_fcf)
+        fcf_discounted = fcf / ((1 + wacc) ** (year + 1))
+        fcf_discounted_list.append(fcf_discounted)
 
     # --- Creazione DataFrame annuale ---
     df = pd.DataFrame({
@@ -270,15 +263,13 @@ def calculate_yearly_financials(proj, wacc):
         "EBIT": ebit_list,
         "Tasse": taxes_list,
         "FCF": fcf_list,
-        "FCF Attualizzato": discounted_fcf_list
+        "FCF scontato": fcf_discounted_list
     })
 
     # --- NPV medio attualizzato ---
-    npv_medio = np.sum(discounted_fcf_list)
+    npv_medio = sum(fcf_discounted_list)
 
     return df, npv_medio
-
-
 
 
 
