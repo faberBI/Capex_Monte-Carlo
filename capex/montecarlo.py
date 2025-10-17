@@ -7,15 +7,7 @@ import pandas as pd
 
 def run_montecarlo(proj, n_sim, wacc):
     """
-    Simulazioni Monte Carlo per un progetto CAPEX aggiornato alla UI nuova.
-
-    Args:
-        proj (dict): progetto con info su CAPEX, ricavi, costi, ammortamenti
-        n_sim (int): numero simulazioni
-        wacc (float): tasso di sconto WACC
-
-    Returns:
-        dict: risultati simulazione
+    Simulazioni Monte Carlo per un progetto CAPEX.
     """
     years = proj["years"]
     npv_array = np.zeros(n_sim)
@@ -23,7 +15,6 @@ def run_montecarlo(proj, n_sim, wacc):
     pbp_array = np.zeros(n_sim)
 
     def calculate_fractional_pbp(discounted_cum_cf):
-        """Interpolazione lineare per PBP frazionario"""
         negative_idx = np.where(discounted_cum_cf < 0)[0]
         if len(negative_idx) == 0:
             return 1.0
@@ -32,54 +23,39 @@ def run_montecarlo(proj, n_sim, wacc):
             return np.nan
         cf_before = discounted_cum_cf[last_neg_idx]
         cf_after = discounted_cum_cf[last_neg_idx + 1]
-        fraction = -cf_before / (cf_after - cf_before)
-        return last_neg_idx + 1 + fraction
+        return last_neg_idx + 1 + (-cf_before / (cf_after - cf_before))
 
     for sim in range(n_sim):
         dcf_per_year = []
 
         for year in range(years):
-            # --- Ricavi ---
             total_revenue = 0.0
             for rev in proj["revenues_list"]:
-                # Price
-                price_data = rev["price"][year]
-                if price_data.get("is_stochastic", True):
-                    price_val = sample(price_data, year)
+                # --- Ricavi deterministici / stocastici ---
+                if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
+                    revenue_year = rev["price"][year]["value"]
                 else:
-                    price_val = price_data.get("value", 0.0)
-
-                # Quantity
-                quantity_data = rev["quantity"][year]
-                if quantity_data.get("is_stochastic", True):
-                    quantity_val = sample(quantity_data, year)
-                else:
-                    quantity_val = quantity_data.get("value", 1.0)
-
-                total_revenue += price_val * quantity_val
+                    price_val = sample(rev["price"][year], year) if rev["price"][year]["is_stochastic"] else rev["price"][year]["value"]
+                    quantity_val = sample(rev["quantity"][year], year) if rev["quantity"][year]["is_stochastic"] else rev["quantity"][year]["value"]
+                    revenue_year = price_val * quantity_val
+                total_revenue += revenue_year
 
             # --- Costi ---
             fixed_cost = proj.get("fixed_costs", [0]*years)[year]
             var_cost = total_revenue * proj["costs"].get("var_pct", 0.0)
-            other_costs_total = sum(
-                sample(cost.get("values", None), year) for cost in proj.get("other_costs", [])
-            )
+            other_costs_total = sum(sample(c.get("values", None), year) for c in proj.get("other_costs", []))
 
-            # --- EBITDA ---
-            ebitda = total_revenue - fixed_cost - var_cost - other_costs_total
-
-            # --- Ammortamenti ---
+            # --- EBITDA / EBIT / Tasse ---
+            ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
             depreciation = proj.get("depreciation", [0]*years)[year]
             depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
             ammortamenti_tot = depreciation + depreciation_0
-
-            # --- EBIT ---
             ebit = ebitda - ammortamenti_tot
-
-            # --- Tasse ---
+                        # --- Tasse ---
             taxes = -ebit * proj["tax"]
             if ebit < 0:
                 taxes = -taxes  # beneficio fiscale
+            capex_rec = proj.get("capex_rec", [0]*years)[year]
             # --- FCF ---
             #capex_all = capex_init + capex_rec
             capex_all =  capex_rec
@@ -91,7 +67,7 @@ def run_montecarlo(proj, n_sim, wacc):
                 # fcf = ebitda + taxes - capex_init - capex_rec
                 fcf = ebitda + taxes - capex_rec
 
-            # --- DCF attualizzato ---
+            # --- FCF / DCF ---
             dcf = fcf / ((1 + wacc) ** (year + 1))
             dcf_per_year.append(dcf)
 
@@ -100,24 +76,18 @@ def run_montecarlo(proj, n_sim, wacc):
         npv_array[sim] = dcf_per_year.sum()
         pbp_array[sim] = calculate_fractional_pbp(np.cumsum(dcf_per_year))
 
-    avg_discounted_pbp = np.nanmean(pbp_array)
-
-    # Percentili annuali DCF
+    # --- Percentili annuali ---
     percentiles = [5, 25, 50, 75, 95]
-    yearly_dcf_percentiles = {
-        f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles
-    }
-
-    # Percentili cumulati NPV
+    yearly_dcf_percentiles = {f"p{p}": np.percentile(yearly_dcf, p, axis=0).tolist() for p in percentiles}
     npv_cum_matrix = np.cumsum(yearly_dcf, axis=1)
-    yearly_npv_cum_percentiles = {
-        f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles
-    }
-
+    yearly_npv_cum_percentiles = {f"p{p}": np.percentile(npv_cum_matrix, p, axis=0).tolist() for p in percentiles}
     pbp_percentiles = {f"p{p}": np.nanpercentile(pbp_array, p) for p in percentiles}
 
+    # --- CAR / CVaR ---
     car_5pct = np.percentile(npv_array, 5)
     cvar_5pct = np.mean(npv_array[npv_array <= car_5pct]) if np.any(npv_array <= car_5pct) else car_5pct
+
+    avg_discounted_pbp = np.nanmean(pbp_array)
 
     return {
         "npv_array": npv_array,
@@ -133,8 +103,6 @@ def run_montecarlo(proj, n_sim, wacc):
         "yearly_npv_cum_percentiles": yearly_npv_cum_percentiles,
         "pbp_percentiles": pbp_percentiles
     }
-
-
 
 
 
@@ -170,79 +138,47 @@ def sample(dist_obj, year_idx=None):
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
 def calculate_yearly_financials(proj, wacc=0.0):
-    """
-    Calcola i flussi di cassa annuali e i ricavi/EBITDA/FCF anno per anno
-    per un progetto CAPEX, gestendo ricavi stocastici o deterministici.
-
-    Args:
-        proj (dict): progetto con informazioni su ricavi, costi, ammortamenti, CAPEX
-        wacc (float): tasso di sconto per attualizzare i flussi
-
-    Returns:
-        tuple: (DataFrame dettagli annuali, NPV medio attualizzato)
-    """
     years = proj["years"]
-
-    revenues_total = []
-    ebitda_list = []
-    ebit_list = []
-    taxes_list = []
-    fcf_list = []
+    revenues_total, ebitda_list, ebit_list, taxes_list, fcf_list = [], [], [], [], []
 
     for year in range(years):
-        # --- Ricavi ---
         total_revenue = 0.0
         for rev in proj["revenues_list"]:
-            # Price
-            price_data = rev["price"][year]
-            if price_data.get("is_stochastic", True):
-                price_val = sample(price_data, year)
+            if not rev["price"][year]["is_stochastic"] and not rev["quantity"][year]["is_stochastic"]:
+                # Deterministico: prendi valore totale da UI
+                revenue_year = rev["price"][year]["value"]
             else:
-                price_val = price_data.get("value", 0.0)
+                # Stocastico o misto
+                price_val = sample(rev["price"][year], year) if rev["price"][year]["is_stochastic"] else rev["price"][year]["value"]
+                quantity_val = sample(rev["quantity"][year], year) if rev["quantity"][year]["is_stochastic"] else rev["quantity"][year]["value"]
+                revenue_year = price_val * quantity_val
 
-            # Quantity
-            quantity_data = rev["quantity"][year]
-            if quantity_data.get("is_stochastic", True):
-                quantity_val = sample(quantity_data, year)
-            else:
-                quantity_val = quantity_data.get("value", 1.0)
-
-            total_revenue += price_val * quantity_val
+            total_revenue += revenue_year
 
         revenues_total.append(total_revenue)
 
-        # --- Costi ---
+        # Costi
         fixed_cost = proj.get("fixed_costs", [0]*years)[year]
         var_cost = total_revenue * proj["costs"].get("var_pct", 0.0)
-        other_costs_total = sum(
-            sample(cost.get("values", None), year) for cost in proj.get("other_costs", [])
-        )
+        other_costs_total = sum(sample(c.get("values", None), year) for c in proj.get("other_costs", []))
 
-        # --- EBITDA ---
-        ebitda = total_revenue - fixed_cost - var_cost - other_costs_total
+        ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
         ebitda_list.append(ebitda)
 
-        # --- Ammortamenti ---
         depreciation = proj.get("depreciation", [0]*years)[year]
-        depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+        depreciation_0 = proj.get("depreciation_0",0) if year==0 else 0
         ammortamenti_tot = depreciation + depreciation_0
 
-        # --- EBIT ---
         ebit = ebitda - ammortamenti_tot
         ebit_list.append(ebit)
 
-        # --- Tasse ---
-        taxes = -ebit * proj["tax"]
-        if ebit < 0:
-            taxes = -taxes  # beneficio fiscale
+        taxes = -ebit * proj["tax"] if ebit >=0 else -(-ebit * proj["tax"])
         taxes_list.append(taxes)
 
-        # --- FCF ---
-        capex_rec = proj.get("capex_rec", [0]*years)[year]
+        capex_rec = proj.get("capex_rec",[0]*years)[year]
         fcf = ebitda + taxes - capex_rec
         fcf_list.append(fcf)
 
-    # --- Creazione DataFrame annuale ---
     df = pd.DataFrame({
         "Anno": list(range(1, years+1)),
         "Ricavi": revenues_total,
@@ -252,10 +188,10 @@ def calculate_yearly_financials(proj, wacc=0.0):
         "FCF": fcf_list
     })
 
-    # --- NPV medio attualizzato con WACC ---
     npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
-
     return df, npv_medio
+
+
 
 
 
