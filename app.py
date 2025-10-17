@@ -93,9 +93,10 @@ for i, proj in enumerate(st.session_state.projects):
                     st.markdown(f"Anno {y+1} - {key}")
                 
                     # Toggle deterministico / stocastico
+                    rev[key][y].setdefault("is_stochastic", True)
                     is_stochastic = st.checkbox(
                         "Stocastico",
-                        value=rev[key][y].get("is_stochastic", True),
+                        value=rev[key][y]["is_stochastic"],
                         key=f"{key}_stochastic_{i}_{j}_{y}"
                     )
                     rev[key][y]["is_stochastic"] = is_stochastic
@@ -109,7 +110,6 @@ for i, proj in enumerate(st.session_state.projects):
                         )
                         rev[key][y]["dist"] = dist_type
                     
-                        # Parametri distribuzioni
                         if dist_type == "Normale":
                             rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                             rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
@@ -124,12 +124,13 @@ for i, proj in enumerate(st.session_state.projects):
                             rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
                             rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
                     else:
-                        # Deterministico: solo un campo numerico
+                        # Deterministico: inserisci price e quantity separatamente
                         rev[key][y]["value"] = st.number_input(
-                            f"Valore deterministico anno {y+1}",
+                            f"{key.capitalize()} deterministico anno {y+1}",
                             value=rev[key][y].get("value", 0.0),
                             key=f"{key}_det_{i}_{j}_{y}"
                         )
+                    
                     
         
                     
@@ -428,6 +429,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
