@@ -22,6 +22,68 @@ api_key = st.secrets["OPENAI_API_KEY"]
 
 
 
+# ------------------ Calcolo dettagliato per anno ------------------
+def calculate_yearly_financials(proj, wacc=0.0):
+    years = proj["years"]
+    revenues_total, ebitda_list, ebit_list, taxes_list, fcf_list = [], [], [], [], []
+
+    for year in range(years):
+        total_revenue = 0.0
+        for rev in proj["revenues_list"]:
+            if not rev["price"][year]["is_stochastic"]:
+                # Deterministico: usa p1 * q1
+                price_val = rev["price"][year].get("p1", 0.0)
+                quantity_val = rev["quantity"][year].get("p1", 1.0)
+            else:
+                # Stocastico: campiona
+                price_val = sample(rev["price"][year], year)
+                quantity_val = sample(rev["quantity"][year], year)
+            revenue_year = price_val * quantity_val
+            total_revenue += revenue_year
+
+        revenues_total.append(total_revenue)
+
+        # Costi
+        fixed_cost = proj.get("fixed_costs", [0]*years)[year]
+        var_cost = total_revenue * proj["costs"].get("var_pct", 0.0)
+        other_costs_total = sum(sample(c.get("values", None), year) for c in proj.get("other_costs", []))
+
+        ebitda = total_revenue - var_cost - fixed_cost - other_costs_total
+        ebitda_list.append(ebitda)
+
+        depreciation = proj.get("depreciation", [0]*years)[year]
+        depreciation_0 = proj.get("depreciation_0", 0) if year == 0 else 0
+        ammortamenti_tot = depreciation + depreciation_0
+
+        ebit = ebitda - ammortamenti_tot
+        ebit_list.append(ebit)
+
+        taxes = -ebit * proj["tax"] if ebit >=0 else -(-ebit * proj["tax"])
+        taxes_list.append(taxes)
+
+        capex_rec = proj.get("capex_rec", [0]*years)[year]
+        fcf = ebitda + taxes - capex_rec
+        fcf_list.append(fcf)
+
+    # Creazione DataFrame
+    df = pd.DataFrame({
+        "Anno": list(range(1, years+1)),
+        "Ricavi": revenues_total,
+        "EBITDA": ebitda_list,
+        "EBIT": ebit_list,
+        "Tasse": taxes_list,
+        "FCF": fcf_list
+    })
+
+    # NPV medio
+    npv_medio = sum(fcf / ((1 + wacc) ** (year+1)) for year, fcf in enumerate(fcf_list))
+
+    return df, npv_medio
+
+
+
+
+
 # ------------------ Funzione di campionamento ------------------
 def sample(dist_obj, year_idx=None):
     """Campionamento stocastico per ricavi o other_costs."""
@@ -324,6 +386,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
