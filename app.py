@@ -233,32 +233,26 @@ for i, proj in enumerate(st.session_state.projects):
 
 # ------------------ Funzione Monte Carlo aggiornata ------------------
 def sample(dist_obj, year_idx=None):
-    """Campionamento stocastico per ricavi o other_costs."""
+    """Campionamento stocastico solo per other_costs o ricavi stocastici."""
+    # Se è una lista, seleziona anno
     if isinstance(dist_obj, list):
         if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste anno per anno")
+            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
         dist_obj = dist_obj[year_idx]
 
     dist_type = dist_obj.get("dist", "Normale")
-    p1 = dist_obj.get("p1", 0.0) or 0.0
-    p2 = dist_obj.get("p2", 0.0) or 0.0
-    p3 = dist_obj.get("p3", p1 + p2) or (p1 + p2)
-
+    p1 = dist_obj.get("p1", 0.0)
+    p2 = dist_obj.get("p2", 0.0)
+    p3 = dist_obj.get("p3", p1 + p2)
+    
     if dist_type == "Normale":
-        return np.random.normal(p1, max(p2, 1e-6))
+        return np.random.normal(p1, p2)
     elif dist_type == "Triangolare":
-        # Corregge p2 se fuori range
-        p2 = max(min(p2, p3), p1)
         return np.random.triangular(p1, p2, p3)
     elif dist_type == "Lognormale":
-        return np.random.lognormal(p1, max(p2, 1e-6))
+        return np.random.lognormal(p1, p2)
     elif dist_type == "Uniforme":
-        if p2 < p1:
-            p2 = p1
         return np.random.uniform(p1, p2)
-    elif dist_type == "Deterministico":
-        # Per il nuovo toggle deterministico
-        return dist_obj.get("value", p1)  # prende value se presente
     else:
         raise ValueError(f"Distribuzione non supportata: {dist_type}")
 
@@ -426,6 +420,7 @@ if st.session_state.results:
         file_name="capex_risultati_completi.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
