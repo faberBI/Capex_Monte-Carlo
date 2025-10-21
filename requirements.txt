@@ -9,5 +9,8 @@ numpy_financial
 fpdf2>=2.7.4
 kaleido>=0.2.1
 oauth2client>=4.1.3
+Pillow
+
+
 
 
