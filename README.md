@@ -1,6 +1,6 @@
-# 📊 CAPEX Risk Framework con WACC & Trend Annuali
+# 📊 CAPEX Risk Framework 
 
-Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento di progetti di investimento **CAPEX** tramite **simulazioni Monte Carlo**, considerando il **WACC**, i trend annuali di prezzi, quantità e costi fissi.
+Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento di progetti di investimento **CAPEX** tramite **simulazioni Monte Carlo**, considerando distribuzioni stastistiche per ricavi, costi variabili e costi fissi.
 
 ---
 
@@ -18,7 +18,6 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 * **Tax rate**.
 * **CAPEX iniziale**.
 * **Orizzonte temporale (anni)**.
-* **Calcolo automatico del WACC**.
 
 ### 📈 Parametri Ricavi
 
@@ -28,13 +27,11 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
   * Triangolare (p1, p2, p3)
   * Lognormale
   * Uniforme
-* Trend annuali di prezzo e quantità (anche negativi).
 
 ### 🏭 Parametri Costi
 
 * Costi variabili (% sui ricavi).
 * Costi fissi annuali.
-* Trend inflazione costi fissi per anno.
 
 ### 🎲 Simulazione Monte Carlo
 
@@ -45,6 +42,8 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
   * **CaR (Capital at Risk 95%)**.
   * **Probabilità NPV < 0**.
   * **CVaR (Conditional VaR 95%)**.
+  * **IRR distribution**.
+  * ** Payback to period distribution**.
 
 ### 📊 Visualizzazioni
 
@@ -107,5 +106,5 @@ streamlit run app.py
 ---
 ## ✨ Autori
 Il progetto è stato sviluppato da:  
-- **Fabrizio Di Sciorio, PhD** – Analisi rischio e modellizzazione finanziaria  
+- **Fabrizio Di Sciorio, PhD** – Senior Data Scientist  
 
