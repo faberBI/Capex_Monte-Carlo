@@ -20,7 +20,7 @@ import streamlit as st
 # Carica il logo
 logo = Image.open("Image/logo_fibercop.PNG")
 
-st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon="📊", layout="wide")
+st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon=logo , layout="wide")
 st.markdown("""
 <div style='text-align: center;'>
 """, unsafe_allow_html=True)
@@ -210,6 +210,7 @@ if st.session_state.logged_in:
     st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
