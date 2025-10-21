@@ -10,7 +10,7 @@ from capex.visuals import (plot_npv_distribution, plot_npv_distribution, plot_np
 from capex.montercalo import (triangular_sample, run_simulations)
 
 # ------------------------- Streamlit UI -------------------------
-st.title("NPV Monte Carlo Simulator - Streamlit")
+st.title("NPV @Risk Monte Carlo Simulator")
 
 uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
 
@@ -142,4 +142,5 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     }).to_excel(writer, index=False, sheet_name='IRR_percentili')
 
 st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
+
 
