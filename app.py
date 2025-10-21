@@ -6,7 +6,8 @@ import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
 
-
+from capex.visuals import (plot_npv_distribution, plot_npv_distribution, plot_npv_distribution, plot_cumulative_npv, plot_payback_distribution, plot_probs_kri, plot_car_kri)
+from capex.montercalo import (triangular_sample, run_simulations)
 
 # ------------------------- Streamlit UI -------------------------
 st.title("NPV Monte Carlo Simulator - Streamlit")
@@ -141,3 +142,4 @@ with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
     }).to_excel(writer, index=False, sheet_name='IRR_percentili')
 
 st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
+
