@@ -29,7 +29,7 @@ st.image(logo, width=300)  # logo centrato grazie al div
 
 st.markdown("""
 <h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>
-NPV @Risk Tool
+NPV @Risk Simulation Tool by ERM
 </h1>
 <p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>
 Simula scenari finanziari e analizza il rischio con la potenza della Monte Carlo
@@ -210,6 +210,7 @@ if st.session_state.logged_in:
     st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
