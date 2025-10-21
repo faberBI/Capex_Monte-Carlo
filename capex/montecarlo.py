@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
 
-# ------------------------- Funzioni ausiliarie -------------------------
+
 def triangular_sample(min_v, mode_v, max_v, size):
     min_v = np.where(np.isnan(min_v), mode_v, min_v)
     max_v = np.where(np.isnan(max_v), mode_v, max_v)
@@ -21,7 +21,7 @@ def triangular_sample(min_v, mode_v, max_v, size):
         result[constant_mask] = min_v[constant_mask]
     return result
 
-# ------------------------- Funzione principale di simulazione -------------------------
+
 def run_simulations(df, n_sim, discount_rate, tax_rate):
     years = df.shape[0]
     npv_list = []
@@ -75,3 +75,4 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col
+
