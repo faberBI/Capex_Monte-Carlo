@@ -7,8 +7,8 @@ from io import BytesIO
 import numpy_financial as npf
 
 from capex.visuals import (plot_npv_distribution, plot_npv_distribution, plot_npv_distribution, plot_cumulative_npv, plot_payback_distribution, plot_probs_kri, plot_car_kri)
-# from capex.montercalo import triangular_sample
-from capex.montercalo import run_simulations
+
+from capex.montecarlo import (triangular_sample, run_simulations)
 
 import hashlib
 from oauth2client.service_account import ServiceAccountCredentials
@@ -208,6 +208,7 @@ if st.session_state.logged_in:
     st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
