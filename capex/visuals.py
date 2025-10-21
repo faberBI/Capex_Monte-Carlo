@@ -193,43 +193,51 @@ def plot_car_kri(car_value, expected_npv, project_name):
 
     return fig
 
-def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, title="Andamento IRR per anno", figsize=(10,6)):
+def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=None,
+                    title="Andamento IRR per anno", figsize=(10,6)):
     """
-    Crea un grafico stile Excel dell'andamento IRR per anno usando percentili.
+    Grafico andamento IRR per anno con percentili, IRR in %, anni personalizzati.
     
     Parametri:
-    - irr_min: array dei valori minimi per anno
-    - irr_p5: array del 5° percentile per anno
-    - irr_p50: array della mediana (50° percentile) per anno
-    - irr_p95: array del 95° percentile per anno
-    - irr_max: array dei valori massimi per anno
-    - title: titolo del grafico (default="Andamento IRR per anno")
-    - figsize: dimensione della figura (default=(10,6))
+    - irr_min, irr_p5, irr_p50, irr_p95, irr_max: array dei percentili per anno
+    - years_labels: lista o array degli anni reali (es. [2025, 2026, ...])
+    - title: titolo del grafico
+    - figsize: dimensione della figura
     
     Ritorna:
     - fig: figura matplotlib pronta da visualizzare
     """
     
+    # Converti IRR in percentuale
+    irr_min = np.array(irr_min) * 100
+    irr_p5 = np.array(irr_p5) * 100
+    irr_p50 = np.array(irr_p50) * 100
+    irr_p95 = np.array(irr_p95) * 100
+    irr_max = np.array(irr_max) * 100
+    
     n_years = len(irr_min)
-    years = np.arange(1, n_years + 1)
+    
+    if years_labels is None:
+        years_labels = np.arange(1, n_years + 1)
     
     fig, ax = plt.subplots(figsize=figsize)
     
     # Area tra 5° e 95°
-    ax.fill_between(years, irr_p5, irr_p95, color='lightblue', alpha=0.5, label='5-95 percentile')
+    ax.fill_between(years_labels, irr_p5, irr_p95, color='lightblue', alpha=0.5, label='5-95 percentile')
     
     # Linea mediana
-    ax.plot(years, irr_p50, color='blue', linewidth=2, label='Mediana (50° percentile)')
+    ax.plot(years_labels, irr_p50, color='blue', linewidth=2, label='Mediana (50° percentile)')
     
     # Linee estreme (min e max)
-    ax.plot(years, irr_min, '--', color='gray', linewidth=1, label='Min')
-    ax.plot(years, irr_max, '--', color='gray', linewidth=1, label='Max')
+    ax.plot(years_labels, irr_min, '--', color='gray', linewidth=1, label='Min')
+    ax.plot(years_labels, irr_max, '--', color='gray', linewidth=1, label='Max')
     
     ax.set_xlabel("Anno")
-    ax.set_ylabel("IRR")
+    ax.set_ylabel("IRR (%)")
     ax.set_title(title)
-    ax.set_xticks(years)
+    ax.set_xticks(years_labels)
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.5)
     
     return fig
+
