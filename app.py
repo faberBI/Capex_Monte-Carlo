@@ -75,7 +75,7 @@ else:
 if st.session_state.logged_in:
     
 # ------------------------- Streamlit UI -------------------------
-    st.title("NPV @Risk Monte Carlo Simulator")
+    st.title("NPV @Risk Simulation Tool by ERM ")
     
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
     
@@ -210,6 +210,7 @@ if st.session_state.logged_in:
     st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
