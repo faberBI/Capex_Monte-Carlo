@@ -1,446 +1,143 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
-import io
-import time
-from openai import OpenAI, OpenAIError
-
-from capex.wacc import calculate_wacc
-from capex.montecarlo import run_montecarlo, calculate_yearly_financials
-from capex.visuals import (
-    plot_npv_distribution,
-    plot_boxplot,
-    plot_cashflows,
-    plot_risk_return_matrix,
-    plot_car_kri,
-    plot_cumulative_npv,
-    plot_probs_kri
-)
-
-api_key = st.secrets["OPENAI_API_KEY"]
-
-# ------------------ Session state ------------------
-if "projects" not in st.session_state:
-    st.session_state.projects = []
-if "results" not in st.session_state:
-    st.session_state.results = None
-
-# ------------------ Funzione per aggiungere progetto ------------------
-def add_project():
-    st.session_state.projects.append({
-        "name": f"Progetto {len(st.session_state.projects)+1}",
-        "equity": 0.5,
-        "debt": 0.5,
-        "ke": 0.10,
-        "kd": 0.05,
-        "tax": 0.30,
-        "capex": 200.0,
-        "years": 10,
-        "capex_rec": None,  # ora fissi anno per anno
-        "fixed_costs": None,  # ora fissi anno per anno
-        "revenues_list": [
-            {
-                "name": "Ricavo 1",
-                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0} for _ in range(10)],
-                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(10)]
-            }
-        ],
-        "costs": {"var_pct": 0.08},
-        "other_costs": [],
-        "price_growth": [0.01]*10,
-        "quantity_growth": [0.05]*10,
-        "depreciation": [20.0]*10
-    })
-
-# ------------------ UI ------------------
-st.title("📊 CAPEX @Risk Framework by ERM")
-st.button("➕ Aggiungi progetto", on_click=add_project)
-n_sim = st.slider("Numero simulazioni Monte Carlo", 5000, 100_000, 10_000,  step=5000)
-
-# ------------------ Loop progetti ------------------
-for i, proj in enumerate(st.session_state.projects):
-    with st.expander(f"⚙️ Parametri {proj['name']}", expanded=True):
-        # Parametri finanziari
-        proj["name"] = st.text_input("Nome progetto", value=proj["name"], key=f"name_{i}")
-        proj["equity"] = st.slider("Peso Equity", 0.0, 1.0, proj["equity"], key=f"equity_{i}")
-        proj["debt"] = 1 - proj["equity"]
-        proj["ke"] = st.number_input("Costo Equity (ke)", value=proj["ke"], key=f"ke_{i}")
-        proj["kd"] = st.number_input("Costo Debito (kd)", value=proj["kd"], key=f"kd_{i}")
-        proj["tax"] = st.number_input("Tax Rate", value=proj["tax"], key=f"tax_{i}")
-        proj["capex"] = st.number_input("CAPEX iniziale", value=proj["capex"], key=f"capex_{i}")
-        proj["years"] = st.slider("Orizzonte temporale (anni)", 1, 20, proj["years"], key=f"years_{i}")
-
-        # ------------------ CAPEX Ricorrente (fisso anno per anno) ------------------
-        st.subheader("🏗️ CAPEX Ricorrente (anno per anno, valori fissi)")
-        if proj.get("capex_rec") is None:
-            if st.button(f"➕ Aggiungi CAPEX Ricorrente", key=f"add_capex_rec_{i}"):
-                proj["capex_rec"] = [0.0 for _ in range(proj["years"])]
-
-        if proj.get("capex_rec") is not None:
-            for y in range(proj["years"]):
-                proj["capex_rec"][y] = st.number_input(f"CAPEX anno {y+1}", value=proj["capex_rec"][y], key=f"capex_rec_{i}_{y}")
-
-        # ------------------ Ricavi multipli con distribuzione ------------------
-        st.subheader("📈 Ricavi")
-        for j, rev in enumerate(proj["revenues_list"]):
-            st.markdown(f"**{rev['name']}**")
-            for key in ["price", "quantity"]:
-                # Assicuriamoci che la lista abbia almeno 'years' elementi
-                while len(rev[key]) < proj["years"]:
-                    rev[key].append({"dist": "Normale", "p1": 0.0, "p2": 0.0})
-        
-                for y in range(proj["years"]):
-                    st.markdown(f"Anno {y+1} - {key}")
-                    dist_type = st.selectbox(
-                        "Distribuzione",
-                        ["Normale", "Triangolare", "Lognormale", "Uniforme"],
-                        index=["Normale", "Triangolare", "Lognormale", "Uniforme"].index(rev[key][y].get("dist", "Normale")),
-                        key=f"{key}_dist_{i}_{j}_{y}"
-                    )
-                    rev[key][y]["dist"] = dist_type
-        
-                    if dist_type == "Normale":
-                        rev[key][y]["p1"] = st.number_input("Media (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione standard (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    elif dist_type == "Triangolare":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Modal (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                        rev[key][y]["p3"] = st.number_input("Massimo (p3)", value=rev[key][y].get("p3", 0.0), key=f"{key}_p3_{i}_{j}_{y}")
-                    elif dist_type == "Lognormale":
-                        rev[key][y]["p1"] = st.number_input("Media log (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Deviazione log (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-                    elif dist_type == "Uniforme":
-                        rev[key][y]["p1"] = st.number_input("Minimo (p1)", value=rev[key][y].get("p1", 0.0), key=f"{key}_p1_{i}_{j}_{y}")
-                        rev[key][y]["p2"] = st.number_input("Massimo (p2)", value=rev[key][y].get("p2", 0.0), key=f"{key}_p2_{i}_{j}_{y}")
-        
-        # Pulsante per aggiungere nuova voce di ricavo
-        if st.button(f"➕ Aggiungi voce di ricavo al progetto {proj['name']}", key=f"add_revenue_{i}"):
-            proj["revenues_list"].append({
-                "name": f"Ricavo {len(proj['revenues_list']) + 1}",
-                "price": [{"dist": "Normale", "p1": 100.0, "p2": 10.0} for _ in range(proj["years"])],
-                "quantity": [{"dist": "Normale", "p1": 1000.0, "p2": 100.0} for _ in range(proj["years"])]
-            })
-
-        # ------------------ Costi Variabili ------------------
-        st.subheader("💸 Costi Variabili")
-        proj["costs"]["var_pct"] = st.number_input("% Costi Variabili sui ricavi", value=proj["costs"]["var_pct"], min_value=0.0, max_value=1.0, step=0.01, key=f"var_pct_{i}")
-
-        # ------------------ Costi Fissi anno per anno ------------------
-        st.subheader("💸 Costi Fissi annui")
-        if proj.get("fixed_costs") is None or len(proj["fixed_costs"]) != proj["years"]:
-            proj["fixed_costs"] = [0.0]*proj["years"]
-        for y in range(proj["years"]):
-            proj["fixed_costs"][y] = st.number_input(f"Costi fissi anno {y+1}", value=proj["fixed_costs"][y], key=f"fixed_{i}_{y}")
-
-        # ------------------ Ammortamento ------------------
-        st.subheader("🏗️ Ammortamento (Depreciation)")
-
-        # Ammortamento iniziale anno 0
-        if "depreciation_0" not in proj:
-            proj["depreciation_0"] = proj["capex"]/proj["years"]  # default proporzionale al CAPEX
-
-        proj["depreciation_0"] = st.number_input(
-        f"Ammortamento anno 0 (iniziale) progetto {proj['name']}",
-        value=proj["depreciation_0"],
-        key=f"dep0_{i}"
-        )
-
-        # Ammortamento anno per anno
-        if "depreciation" not in proj or len(proj["depreciation"]) != proj["years"]:
-            proj["depreciation"] = [proj["capex"]/proj["years"]]*proj["years"]
-
-        df_dep = pd.DataFrame({"Anno": range(1, proj["years"]+1), "Ammortamento": proj["depreciation"]})
-        df_dep_edit = st.data_editor(df_dep, key=f"dep_{i}", num_rows="dynamic")
-        proj["depreciation"] = df_dep_edit["Ammortamento"].tolist()
-
-        # ------------------ Costi aggiuntivi stocastici ------------------
-        st.subheader("📉 Costi aggiuntivi")
-        proj.setdefault("other_costs", [])
-        for j, cost in enumerate(proj["other_costs"]):
-            st.markdown(f"**{cost['name']}**")
-            for year_idx in range(proj["years"]):
-                st.markdown(f"Anno {year_idx+1}")
-                year_cost = cost["values"][year_idx]
-                dist_options = ["Normale", "Triangolare", "Lognormale", "Uniforme"]
-                selected_dist = st.selectbox(
-                    f"Distribuzione anno {year_idx+1} - {cost['name']}",
-                    options=dist_options,
-                    index=dist_options.index(year_cost.get("dist", "Normale")),
-                    key=f"oc_dist_{i}_{j}_{year_idx}"
-                )
-                year_cost["dist"] = selected_dist
-                if selected_dist == "Normale":
-                    year_cost["p1"] = st.number_input(f"Media (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_n_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Std Dev (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_n_p2_{i}_{j}_{year_idx}")
-                elif selected_dist == "Triangolare":
-                    year_cost["p1"] = st.number_input(f"Minimo (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_t_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Modalità (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_t_p2_{i}_{j}_{year_idx}")
-                    year_cost["p3"] = st.number_input(f"Massimo (p3) anno {year_idx+1}", value=year_cost.get("p3",0.0), key=f"oc_t_p3_{i}_{j}_{year_idx}")
-                elif selected_dist == "Lognormale":
-                    year_cost["p1"] = st.number_input(f"Mu (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_l_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Sigma (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_l_p2_{i}_{j}_{year_idx}")
-                elif selected_dist == "Uniforme":
-                    year_cost["p1"] = st.number_input(f"Min (p1) anno {year_idx+1}", value=year_cost.get("p1",0.0), key=f"oc_u_p1_{i}_{j}_{year_idx}")
-                    year_cost["p2"] = st.number_input(f"Max (p2) anno {year_idx+1}", value=year_cost.get("p2",0.0), key=f"oc_u_p2_{i}_{j}_{year_idx}")
-        if st.button(f"➕ Aggiungi costo stocastico al progetto {proj['name']}", key=f"add_oc_{i}"):
-            proj["other_costs"].append({
-                "name": f"Costo {len(proj['other_costs'])+1}",
-                "values": [{"dist":"Normale","p1":0.0,"p2":0.0} for _ in range(proj["years"])]
-            })
-
-        # ------------------ Trend annuali ------------------
-        st.subheader("📊 Trend annuali")
-        
-        # Assicuriamoci che le liste abbiano almeno 'years' elementi
-        proj.setdefault("price_growth", [0.0] * proj["years"])
-        proj.setdefault("quantity_growth", [0.0] * proj["years"])
-        
-        while len(proj["price_growth"]) < proj["years"]:
-            proj["price_growth"].append(0.0)
-        while len(proj["quantity_growth"]) < proj["years"]:
-            proj["quantity_growth"].append(0.0)
-        
-        for t in range(proj["years"]):
-            proj["price_growth"][t] = st.slider(
-                f"Crescita prezzo anno {t+1} (%)", 
-                -0.5, 0.5, 
-                proj["price_growth"][t], 
-                0.05, 
-                key=f"pg_{i}_{t}"
-            )
-            proj["quantity_growth"][t] = st.slider(
-                f"Crescita quantità anno {t+1} (%)", 
-                -0.5, 0.5, 
-                proj["quantity_growth"][t], 
-                0.05, 
-                key=f"qg_{i}_{t}"
-            )
-
-        # WACC
-        wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
-        st.write(f"**WACC calcolato:** {wacc:.2%}")
-
-# ------------------ Funzione Monte Carlo aggiornata ------------------
-def sample(dist_obj, year_idx=None):
-    """Campionamento stocastico solo per other_costs o ricavi, non per CAPEX o costi fissi."""
-    # Se è una lista, seleziona anno
-    if isinstance(dist_obj, list):
-        if year_idx is None:
-            raise ValueError("year_idx deve essere specificato per liste di distribuzioni anno per anno")
-        dist_obj = dist_obj[year_idx]
-    dist_type = dist_obj.get("dist", "Normale")
-    p1 = dist_obj.get("p1", 0.0)
-    p2 = dist_obj.get("p2", 0.0)
-    p3 = dist_obj.get("p3", p1+p2)
-    if dist_type == "Normale":
-        return np.random.normal(p1, p2)
-    elif dist_type == "Triangolare":
-        return np.random.triangular(p1, p2, p3)
-    elif dist_type == "Lognormale":
-        return np.random.lognormal(p1, p2)
-    elif dist_type == "Uniforme":
-        return np.random.uniform(p1, p2)
-    else:
-        raise ValueError(f"Distribuzione non supportata: {dist_type}")
-
-# ------------------ Avvio simulazioni ------------------
-if st.button("▶️ Avvia simulazioni"):
-    results = []
-    for proj in st.session_state.projects:
-        wacc = calculate_wacc(proj["equity"], proj["debt"], proj["ke"], proj["kd"], proj["tax"])
-        sim_result = run_montecarlo(proj, n_sim, wacc)
-        results.append({"name": proj["name"], **sim_result})
-
-        # Visualizzazione
-        st.subheader(f"📊 Risultati {proj['name']}")
-        st.write(f"Expected NPV: {sim_result['expected_npv']:.2f}")
-        st.write(f"CaR (95%): {sim_result['car']:.2f}")
-        st.write(f"Probabilità NPV < 0: {sim_result['downside_prob']*100:.1f}%")
-        st.write(f"Conditional VaR (95%): {sim_result['cvar']:.2f}")
-
-        # ------------------ Grafici classici ------------------
-        st.pyplot(plot_npv_distribution(sim_result["npv_array"], sim_result["expected_npv"], 
-                                        np.percentile(sim_result["npv_array"], 5), proj["name"]))
-        st.pyplot(plot_boxplot(sim_result["npv_array"], proj["name"]))
-        st.pyplot(plot_cashflows(sim_result["yearly_cash_flows"], proj["years"], proj["name"]))
-        st.plotly_chart(plot_car_kri(sim_result["car"], sim_result["expected_npv"], proj["name"]), use_container_width=True)
-
-        # ------------------ KRI corretto ------------------
-        kri_pct = (sim_result["expected_npv"] - sim_result["car"]) / sim_result["expected_npv"] if sim_result["expected_npv"] != 0 else 1.0
-        kri_pct = np.clip(kri_pct, 0, 1)
-        kri_text = "🔴 Rischio Alto" if kri_pct > 0.5 else ("🟡 Rischio Medio" if kri_pct > 0.25 else "🟢 Rischio Basso")
-        st.markdown(f"**KRI sintetico on CaR:** {kri_text} ({kri_pct*100:.1f}% del valore atteso)")
-
-        st.plotly_chart(plot_probs_kri(sim_result['downside_prob'],  proj["name"]), use_container_width=True)
-        kri_probs_text = "🔴 Rischio Alto" if sim_result['downside_prob']> 0.07 else ("🟡 Rischio Medio" if sim_result['downside_prob'] > 0.05 else "🟢 Rischio Basso")
-        st.markdown(f"**KRI sintetico on probs:** {kri_probs_text}")
-
-        # ------------------ NPV cumulato e Payback ------------------
-        npv_cum_matrix = np.cumsum(sim_result['yearly_cash_flows'], axis=1)  # cumulativo anno per anno
-        sim_result['npv_cum_matrix'] = npv_cum_matrix
-
-        # PBP mediana (anno in cui NPV mediano diventa positivo)
-        median_cum_npv = np.median(npv_cum_matrix, axis=0)
-        pbp_median = np.argmax(median_cum_npv > 0) + 1  # +1 perché gli anni partono da 1
-        st.write(f"**PBP attualizzato medio (mediana NPV):** {pbp_median} anni")
-
-        # Grafico NPV cumulato a serie storica
-        st.pyplot(plot_cumulative_npv(npv_cum_matrix, proj['name']))
-
-    st.session_state.results = results
-
-if st.session_state.results:
-    for r in st.session_state.results:
-        proj = next(p for p in st.session_state.projects if p["name"] == r["name"])
-        df_financials, npv_medio = calculate_yearly_financials(proj)
-        
-        st.subheader(f"📊 Dettaglio finanziario per anno - {proj['name']}")
-        st.dataframe(df_financials.style.format("{:.2f}"))
+import numpy as np
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from io import BytesIO
+import numpy_financial as npf
 
 
 
-# ------------------ Matrice rischio-rendimento e GPT ------------------
-if st.session_state.results:
-    results = st.session_state.results
-    st.subheader("📌 Matrice rischio-rendimento")
-    st.pyplot(plot_risk_return_matrix(results))
+# ------------------------- Streamlit UI -------------------------
+st.title("NPV Monte Carlo Simulator - Streamlit")
 
-    # Preparazione dati per GPT
-    client = OpenAI(api_key=api_key)
-    summary_df = pd.DataFrame([
-        {
-            "name": r["name"],
-            "expected_npv": r["expected_npv"],
-            "car": r["car"],
-            "downside_prob": r["downside_prob"],
-            "cvar": r["cvar"],
-            "avg_yearly_cashflow": np.mean(r["yearly_cash_flows"])
-        }
-        for r in results
-    ])
+uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
 
-    prompt = f"""
-Ecco i risultati sintetici dei progetti (Monte Carlo CAPEX Risk):
+with st.sidebar:
+    project_name = st.text_input("Nome progetto", value="Progetto 1")
+    discount_rate = st.number_input("Tasso di sconto (es. 0.10)", value=0.10, step=0.01, format="%.4f")
+    tax_rate = st.number_input("Aliquota fiscale (es. 0.25)", value=0.25, step=0.01, format="%.4f")
+    n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
+    seed = st.number_input("Seed (0=random)", value=0)
+    run_button = st.button("Esegui simulazione")
 
-{summary_df.to_string(index=False)}
+if uploaded_file is not None:
+    df = pd.read_excel(uploaded_file)
+    st.dataframe(df)
 
-Fornisci un commento sintetico e professionale, evidenziando:
-- Miglior trade-off rischio/rendimento.
-- Robustezza dei NPV stimati.
-- Eventuali rischi particolari emersi dalle simulazioni.
-"""
+if run_button and uploaded_file is not None:
+    if seed !=0:
+        np.random.seed(int(seed))
+    npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col = run_simulations(df, int(n_sim), float(discount_rate), float(tax_rate))
 
-    if st.button("💬 Genera commento GPT"):
-        for _ in range(3):
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "Sei un analista finanziario esperto in valutazioni CAPEX."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                st.subheader("📑 Commento di GPT")
-                st.write(response.choices[0].message.content)
-                break
-            except OpenAIError:
-                st.warning("Errore OpenAI (es. rate limit), riprovo tra 5 secondi...")
-                time.sleep(5)
-
-# ------------------ Export risultati completo ------------------
-if st.session_state.results:
-    results = st.session_state.results
-    output = io.BytesIO()
+    payback_array = []
+    N4_array = np.arange(fcf_matrix.shape[1]) + 1/6  # frazione iniziale anno
     
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # --- Sheet riepilogo generale ---
-        df_summary = pd.DataFrame([
-            {
-                "name": r["name"],
-                "expected_npv": r["expected_npv"],
-                "car": r["car"],
-                "cvar": r["cvar"],
-                "downside_prob": r["downside_prob"],
-                "discounted_pbp": r["discounted_pbp"]
-            } for r in results
-        ])
-        df_summary.to_excel(writer, index=False, sheet_name='Risultati')
+    for i in range(fcf_matrix.shape[0]):
+        npv_cum = np.cumsum(fcf_pv_matrix[i,:])
+        pb = np.nan  # default se NPV cumulato resta negativo
+    
+        for j in range(len(npv_cum)):
+            M19 = npv_cum[j-1] if j > 0 else 0
+            N19 = npv_cum[j]
+            N4 = N4_array[j]
+    
+            if N19 >= 0:
+                if j == 0:
+                    pb = N19  # già positivo nel primo anno
+                else:
+                    pb = -M19 / (N19 - M19) + N4 - 1
+                break  # payback trovato
+            
+        payback_array.append(pb)
+    
+    payback_array = np.array(payback_array)
+    
+    
+    # ------------------------- IRR per anno -------------------------
+    n_years = fcf_matrix.shape[1]
+    irr_matrix = np.zeros((fcf_matrix.shape[0], n_years))
+    
+    for i in range(fcf_matrix.shape[0]):
+        for j in range(n_years):
+            fcf_subset = fcf_matrix[i, :j+1]  # flussi fino all'anno j
+            # IRR calcolabile solo se ci sono flussi negativi e positivi
+            if np.any(fcf_subset < 0) and np.any(fcf_subset > 0):
+                irr_matrix[i, j] = npf.irr(fcf_subset)
+            else:
+                irr_matrix[i, j] = 0
+    
+    # Percentili IRR per anno
+    irr_min = np.nanmin(irr_matrix, axis=0)
+    irr_p5 = np.nanpercentile(irr_matrix, 5, axis=0)
+    irr_p50 = np.nanpercentile(irr_matrix, 50, axis=0)
+    irr_p95 = np.nanpercentile(irr_matrix, 95, axis=0)
+    irr_max = np.nanmax(irr_matrix, axis=0)
 
-        # --- Sheet per ciascun progetto ---
-        for r in results:
-            project_name = r['name'][:31]  # Excel max 31 char
+    # Metriche principali
+    expected_npv = np.mean(npv_array)
+    percentile_5 = np.percentile(npv_array,5)
+    downside_prob = np.mean(npv_array<0)
 
-            # 1️⃣ NPV simulazioni
-            npv_df = pd.DataFrame(r["npv_array"], columns=["NPV"])
-            npv_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV")
+    st.metric("Expected NPV", f"{expected_npv:,.2f}")
+    st.metric("VaR 95% (CaR)", f"{percentile_5:,.2f}")
+    st.metric("Probabilità NPV<0", f"{downside_prob*100:.2f}%")
 
-            # 2️⃣ Cash flow annuali
-            cf_df = pd.DataFrame(r["yearly_cash_flows"], columns=[f"Anno {i+1}" for i in range(r["yearly_cash_flows"].shape[1])])
-            cf_df.to_excel(writer, index=False, sheet_name=f"{project_name}_CashFlow")
+   
+    # Grafici
+    st.pyplot(plot_npv_distribution(npv_array, expected_npv, percentile_5, project_name))
+    st.pyplot(plot_boxplot(npv_array, project_name))
+    st.pyplot(plot_cashflows(fcf_matrix, fcf_matrix.shape[1], project_name))
+    st.pyplot(plot_cumulative_npv(npv_cum_matrix, project_name))
+    st.pyplot(plot_payback_distribution(payback_array, project_name))
+    
 
-            # 3️⃣ Percentili cash flow annuali
-            cf_pct_df = pd.DataFrame(r["yearly_cashflow_percentiles"])
-            cf_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_CF_Percentili")
+    # ------------------------- KRI Gauges -------------------------
+    st.plotly_chart(plot_car_kri(percentile_5, expected_npv, project_name))
+    fig_prob = plot_probs_kri(downside_prob, project_name)
+    st.plotly_chart(fig_prob)
 
-            # 4️⃣ NPV cumulato
-            npv_cum_df = pd.DataFrame(r["npv_cum_matrix"], columns=[f"Anno {i+1}" for i in range(r["npv_cum_matrix"].shape[1])])
-            npv_cum_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV_Cum")
+# Export Excel multi-sheet
+output = BytesIO()
+with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    # NPV simulati
+    pd.DataFrame({'Simulazione': np.arange(1,len(npv_array)+1), 'NPV': npv_array}).to_excel(writer, index=False, sheet_name='NPV')
+    
+    # FCF simulati
+    df_fcf = pd.DataFrame(fcf_matrix, columns=years_col)
+    df_fcf.insert(0, 'Simulazione', np.arange(1, fcf_matrix.shape[0]+1))
+    df_fcf.to_excel(writer, index=False, sheet_name='FCF_simulati')
+    
+    # DCF simulati (FCF scontati)
+    df_dcf = pd.DataFrame(fcf_pv_matrix, columns=years_col)
+    df_dcf.insert(0, 'Simulazione', np.arange(1, fcf_pv_matrix.shape[0]+1))
+    df_dcf.to_excel(writer, index=False, sheet_name='DCF_simulati')
+    
+    # Percentili FCF
+    median_fcf = np.median(fcf_matrix, axis=0)
+    p5_fcf = np.percentile(fcf_matrix,5,axis=0)
+    p95_fcf = np.percentile(fcf_matrix,95,axis=0)
+    pd.DataFrame({'Anno': years_col, 'Median': median_fcf, 'P5': p5_fcf, 'P95': p95_fcf}).to_excel(writer, index=False, sheet_name='FCF_percentili')
+    
+    # Percentili DCF
+    median_dcf = np.median(fcf_pv_matrix, axis=0)
+    p5_dcf = np.percentile(fcf_pv_matrix,5,axis=0)
+    p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
+    pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
+    
+   
+    # Payback period
+    pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
+    
+    
+    # Percentili IRR
+    pd.DataFrame({
+    'Anno': years_col,
+    'IRR_min': irr_min,
+    'IRR_p5': irr_p5,
+    'IRR_p50': irr_p50,
+    'IRR_p95': irr_p95,
+    'IRR_max': irr_max,
+    }).to_excel(writer, index=False, sheet_name='IRR_percentili')
 
-            # 5️⃣ Percentili NPV cumulato
-            npv_cum_pct_df = pd.DataFrame(r["yearly_npv_cum_percentiles"])
-            npv_cum_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_NPV_CumPct")
-
-            # 6️⃣ Payback period simulazioni
-            pbp_df = pd.DataFrame(r["pbp_array"], columns=["PBP"])
-            pbp_df.to_excel(writer, index=False, sheet_name=f"{project_name}_PBP")
-
-            # 7️⃣ Percentili Payback period
-            pbp_pct_df = pd.DataFrame(r["pbp_percentiles"], index=[0])
-            pbp_pct_df.to_excel(writer, index=False, sheet_name=f"{project_name}_PBP_Pct")
-
-    excel_data = output.getvalue()
-
-    st.download_button(
-        label="📥 Scarica risultati completi in Excel",
-        data=excel_data,
-        file_name="capex_risultati_completi.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
