@@ -13,6 +13,28 @@ import hashlib
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 
+from PIL import Image
+import streamlit as st
+
+# Carica il logo
+logo = Image.open("Image/logo_fibercop.PNG")
+
+st.markdown("""
+<div style='text-align: center;'>
+""", unsafe_allow_html=True)
+
+st.image(logo, width=100)  # logo centrato grazie al div
+
+st.markdown("""
+<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>
+NPV @Risk Monte Carlo Simulator
+</h1>
+<p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>
+Simula scenari finanziari e analizza il rischio con la potenza della Monte Carlo
+</p>
+</div>
+""", unsafe_allow_html=True)
+
 # -----------------------------
 # LOGIN SICURO
 # -----------------------------
@@ -185,5 +207,6 @@ if st.session_state.logged_in:
     st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
