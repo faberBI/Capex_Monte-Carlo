@@ -1,10 +1,14 @@
-import matplotlib.pyplot as plt
+import streamlit as st
+import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+from io import BytesIO
+import numpy_financial as npf
 
-# ------------------ Distribuzione NPV ------------------
+
+# ------------------------- Funzioni di plotting -------------------------
 def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
-    npv_array = np.array(npv_array)
     fig, ax = plt.subplots()
     ax.hist(npv_array, bins=50, alpha=0.7, color="#3b82f6", edgecolor="black")
     ax.axvline(expected_npv, color="g", linestyle="--", label="Expected NPV")
@@ -15,9 +19,7 @@ def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
     ax.legend()
     return fig
 
-# ------------------ Boxplot NPV ------------------
 def plot_boxplot(npv_array, name):
-    npv_array = np.array(npv_array)
     fig, ax = plt.subplots()
     ax.boxplot(npv_array, patch_artist=True,
                boxprops=dict(facecolor="#3b82f6", color="black"),
@@ -26,16 +28,8 @@ def plot_boxplot(npv_array, name):
     ax.set_ylabel("NPV")
     return fig
 
-# ------------------ Cashflows ------------------
 def plot_cashflows(yearly_cash_flows, years, name):
-    """
-    yearly_cash_flows può essere:
-    - 1D: valori medi per anno
-    - 2D: simulazioni x anni
-    Viene sempre plottata la media con banda di confidenza 5%-95%.
-    """
     yearly_cash_flows = np.array(yearly_cash_flows)
-    
     if yearly_cash_flows.ndim == 1:
         mean_cf = yearly_cash_flows
         low_cf = yearly_cash_flows
@@ -44,7 +38,6 @@ def plot_cashflows(yearly_cash_flows, years, name):
         mean_cf = np.mean(yearly_cash_flows, axis=0)
         low_cf = np.percentile(yearly_cash_flows, 5, axis=0)
         high_cf = np.percentile(yearly_cash_flows, 95, axis=0)
-    
     fig, ax = plt.subplots()
     ax.bar(range(1, years+1), mean_cf, color="#3b82f6", alpha=0.7, label="Cash Flow Medio")
     ax.fill_between(range(1, years+1), low_cf, high_cf, color="#93c5fd", alpha=0.4, label="5%-95% intervallo")
@@ -54,26 +47,92 @@ def plot_cashflows(yearly_cash_flows, years, name):
     ax.legend()
     return fig
 
-# ------------------ Matrice rischio-rendimento ------------------
-def plot_risk_return_matrix(results):
-    fig, ax = plt.subplots()
-    for r in results:
-        ax.scatter(r["expected_npv"], r["car"], s=100, label=r["name"])
-        ax.text(r["expected_npv"], r["car"], r["name"])
-    ax.set_xlabel("Expected NPV")
-    ax.set_ylabel("CaR (95%)")
-    ax.set_title("Matrice rischio-rendimento")
+def plot_cumulative_npv(npv_cum_matrix, proj_name):
+    median = np.median(npv_cum_matrix, axis=0)
+    p5 = np.percentile(npv_cum_matrix, 5, axis=0)
+    p95 = np.percentile(npv_cum_matrix, 95, axis=0)
+    years = np.arange(1, npv_cum_matrix.shape[1]+1)
+    fig, ax = plt.subplots(figsize=(10,6))
+    ax.plot(years, median, label="Mediana NPV", color="blue", lw=2)
+    ax.fill_between(years, p5, p95, color="blue", alpha=0.2, label="5°-95° percentile")
+    try:
+        pbp_median = np.argmax(median > 0) + 1
+        ax.axvline(pbp_median, color="green", ls="--", lw=2, label=f"NPV positivo anno {pbp_median}")
+    except:
+        pass
+    ax.set_title(f"📈 NPV cumulato per anno - {proj_name}")
+    ax.set_xlabel("Anno")
+    ax.set_ylabel("NPV cumulato")
+    ax.grid(alpha=0.3)
     ax.legend()
     return fig
 
-# ------------------ Soglie rischio ------------------
-def get_dynamic_thresholds(npv_array):
-    npv_array = np.array(npv_array)
-    p33 = np.percentile(npv_array, 33)
-    p66 = np.percentile(npv_array, 66)
-    return p33, p66
+def plot_payback_distribution(payback_array, name):
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.hist(payback_array[~np.isnan(payback_array)], bins=range(1, int(np.nanmax(payback_array))+2),
+            color="#f97316", edgecolor='black', alpha=0.7)
+    ax.set_xlabel("Anno payback")
+    ax.set_ylabel("Frequenza")
+    ax.set_title(f"Distribuzione payback period - {name}")
+    return fig
+    
+    
+def plot_probs_kri(downside_prob, project_name):
+    """
+    Gauge professionale: KRI basato sulla probabilità di NPV < 0.
+    
+    Soglie:
+    - Verde: <5%
+    - Giallo: <7%
+    - Rosso: >7%
+    """
+    # Definizione soglie
+    soglia_verde = 0.05
+    soglia_gialla = 0.07
 
-# ------------------ KRI Gauge ------------------
+    # Determina livello di rischio e colore
+    if downside_prob <=soglia_verde:
+        risk_level = "Basso"
+        color = "#22c55e"  # verde
+    elif downside_prob <= soglia_gialla:
+        risk_level = "Medio"
+        color = "#facc15"  # giallo
+    else:
+        risk_level = "Alto"
+        color = "#ef4444"  # rosso
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=downside_prob*100,
+        number={'suffix': "%", 'font': {'size': 36, 'color': color}},
+        title={
+            'text': f"KRI - {project_name}: {risk_level}",
+            'font': {'size': 22, 'color': "darkblue"}
+        },
+        gauge={
+            'axis': {'range': [0, 100], 'tickvals': [0, 20, 40, 60, 80, 100]},
+            'bar': {'color': "black", 'thickness': 0.05},
+            'steps': [
+                {'range': [0, soglia_verde*100], 'color': "#d1fae5"},
+                {'range': [soglia_verde*100, soglia_gialla*100], 'color': "#fef08a"},
+                {'range': [soglia_gialla*100, 100], 'color': "#fecaca"}
+            ],
+            'threshold': {
+                'line': {'color': color, 'width': 6},
+                'thickness': 0.8,
+                'value': downside_prob*100
+            }
+        }
+    ))
+
+    fig.update_layout(
+        paper_bgcolor='white',
+        font={'color': "darkblue", 'family': "Arial"},
+        height=450,
+    )
+
+    return fig
+   
 def plot_car_kri(car_value, expected_npv, project_name):
     """
     Gauge professionale: KRI = rischio di perdita rispetto all'NPV atteso (%).
@@ -133,100 +192,3 @@ def plot_car_kri(car_value, expected_npv, project_name):
     )
 
     return fig
-
-def plot_cumulative_npv(npv_cum_matrix, proj_name):
-    """
-    Grafico NPV cumulato per anno (mediana + 5° e 95° percentile).
-    
-    Args:
-        npv_cum_matrix (np.array): shape (n_sim, years)
-        proj_name (str): nome progetto
-    """
-    median = np.median(npv_cum_matrix, axis=0)
-    p5 = np.percentile(npv_cum_matrix, 5, axis=0)
-    p95 = np.percentile(npv_cum_matrix, 95, axis=0)
-    years = np.arange(1, npv_cum_matrix.shape[1]+1)
-
-    fig, ax = plt.subplots(figsize=(10,6))
-    ax.plot(years, median, label="Mediana NPV", color="blue", lw=2)
-    ax.fill_between(years, p5, p95, color="blue", alpha=0.2, label="5°-95° percentile")
-    
-    # Evidenzia l'anno in cui la mediana diventa positiva
-    try:
-        pbp_median = np.argmax(median > 0) + 1
-        ax.axvline(pbp_median, color="green", ls="--", lw=2, label=f"NPV positivo anno {pbp_median}")
-    except:
-        pbp_median = None
-
-    ax.set_title(f"📈 NPV cumulato per anno - {proj_name}")
-    ax.set_xlabel("Anno")
-    ax.set_ylabel("NPV cumulato")
-    ax.grid(alpha=0.3)
-    ax.legend()
-    return fig
-
-def plot_probs_kri(downside_prob, project_name):
-    """
-    Gauge professionale: KRI basato sulla probabilità di NPV < 0.
-    
-    Soglie:
-    - Verde: <5%
-    - Giallo: <7%
-    - Rosso: >7%
-    """
-    # Definizione soglie
-    soglia_verde = 0.05
-    soglia_gialla = 0.07
-
-    # Determina livello di rischio e colore
-    if downside_prob <=soglia_verde:
-        risk_level = "Basso"
-        color = "#22c55e"  # verde
-    elif downside_prob <= soglia_gialla:
-        risk_level = "Medio"
-        color = "#facc15"  # giallo
-    else:
-        risk_level = "Alto"
-        color = "#ef4444"  # rosso
-
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=downside_prob*100,
-        number={'suffix': "%", 'font': {'size': 36, 'color': color}},
-        title={
-            'text': f"KRI - {project_name}: {risk_level}",
-            'font': {'size': 22, 'color': "darkblue"}
-        },
-        gauge={
-            'axis': {'range': [0, 100], 'tickvals': [0, 20, 40, 60, 80, 100]},
-            'bar': {'color': "black", 'thickness': 0.05},
-            'steps': [
-                {'range': [0, soglia_verde*100], 'color': "#d1fae5"},
-                {'range': [soglia_verde*100, soglia_gialla*100], 'color': "#fef08a"},
-                {'range': [soglia_gialla*100, 100], 'color': "#fecaca"}
-            ],
-            'threshold': {
-                'line': {'color': color, 'width': 6},
-                'thickness': 0.8,
-                'value': downside_prob*100
-            }
-        }
-    ))
-
-    fig.update_layout(
-        paper_bgcolor='white',
-        font={'color': "darkblue", 'family': "Arial"},
-        height=450,
-    )
-
-    return fig
-
-
-
-
-
-
-
-
-
-
