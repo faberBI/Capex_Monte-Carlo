@@ -164,52 +164,53 @@ if st.session_state.logged_in:
         fig_prob = plot_probs_kri(downside_prob, project_name)
         st.plotly_chart(fig_prob)
     
-    # Export Excel multi-sheet
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # NPV simulati
-        pd.DataFrame({'Simulazione': np.arange(1,len(npv_array)+1), 'NPV': npv_array}).to_excel(writer, index=False, sheet_name='NPV')
+        # Export Excel multi-sheet
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # NPV simulati
+            pd.DataFrame({'Simulazione': np.arange(1,len(npv_array)+1), 'NPV': npv_array}).to_excel(writer, index=False, sheet_name='NPV')
         
-        # FCF simulati
-        df_fcf = pd.DataFrame(fcf_matrix, columns=years_col)
-        df_fcf.insert(0, 'Simulazione', np.arange(1, fcf_matrix.shape[0]+1))
-        df_fcf.to_excel(writer, index=False, sheet_name='FCF_simulati')
+            # FCF simulati
+            df_fcf = pd.DataFrame(fcf_matrix, columns=years_col)
+            df_fcf.insert(0, 'Simulazione', np.arange(1, fcf_matrix.shape[0]+1))
+            df_fcf.to_excel(writer, index=False, sheet_name='FCF_simulati')
         
-        # DCF simulati (FCF scontati)
-        df_dcf = pd.DataFrame(fcf_pv_matrix, columns=years_col)
-        df_dcf.insert(0, 'Simulazione', np.arange(1, fcf_pv_matrix.shape[0]+1))
-        df_dcf.to_excel(writer, index=False, sheet_name='DCF_simulati')
+            # DCF simulati (FCF scontati)
+            df_dcf = pd.DataFrame(fcf_pv_matrix, columns=years_col)
+            df_dcf.insert(0, 'Simulazione', np.arange(1, fcf_pv_matrix.shape[0]+1))
+            df_dcf.to_excel(writer, index=False, sheet_name='DCF_simulati')
         
-        # Percentili FCF
-        median_fcf = np.median(fcf_matrix, axis=0)
-        p5_fcf = np.percentile(fcf_matrix,5,axis=0)
-        p95_fcf = np.percentile(fcf_matrix,95,axis=0)
-        pd.DataFrame({'Anno': years_col, 'Median': median_fcf, 'P5': p5_fcf, 'P95': p95_fcf}).to_excel(writer, index=False, sheet_name='FCF_percentili')
+            # Percentili FCF
+            median_fcf = np.median(fcf_matrix, axis=0)
+            p5_fcf = np.percentile(fcf_matrix,5,axis=0)
+            p95_fcf = np.percentile(fcf_matrix,95,axis=0)
+            pd.DataFrame({'Anno': years_col, 'Median': median_fcf, 'P5': p5_fcf, 'P95': p95_fcf}).to_excel(writer, index=False, sheet_name='FCF_percentili')
         
-        # Percentili DCF
-        median_dcf = np.median(fcf_pv_matrix, axis=0)
-        p5_dcf = np.percentile(fcf_pv_matrix,5,axis=0)
-        p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
-        pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
+            # Percentili DCF
+            median_dcf = np.median(fcf_pv_matrix, axis=0)
+            p5_dcf = np.percentile(fcf_pv_matrix,5,axis=0)
+            p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
+            pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
         
     
-        # Payback period
-        pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
+            # Payback period
+            pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
         
         
-        # Percentili IRR
-        pd.DataFrame({
-        'Anno': years_col,
-        'IRR_min': irr_min,
-        'IRR_p5': irr_p5,
-        'IRR_p50': irr_p50,
-        'IRR_p95': irr_p95,
-        'IRR_max': irr_max,
-        }).to_excel(writer, index=False, sheet_name='IRR_percentili')
+            # Percentili IRR
+            pd.DataFrame({
+            'Anno': years_col,
+            'IRR_min': irr_min,
+            'IRR_p5': irr_p5,
+            'IRR_p50': irr_p50,
+            'IRR_p95': irr_p95,
+            'IRR_max': irr_max,
+            }).to_excel(writer, index=False, sheet_name='IRR_percentili')
     
-    st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
+        st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
