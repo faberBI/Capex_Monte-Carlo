@@ -72,7 +72,9 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
             cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
 
         # 1. EBITDA contribution
-        ebitda = rev_samp + rev_samp2 + cs_samp + costs_fixed
+        revenue = (rev_samp + rev_samp2 )
+        
+        ebitda = revenue + cs_samp + costs_fixed
 
         # 2. EBIT contribution
         ebit = ebitda + amort  # ammortamenti negativi
