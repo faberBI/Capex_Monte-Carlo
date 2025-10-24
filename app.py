@@ -132,7 +132,28 @@ if st.session_state.logged_in:
                     irr_matrix[i, j] = npf.irr(fcf_subset)
                 else:
                     irr_matrix[i, j] = 0
-        
+
+        # ------------------------- PROFITABILITY INDEX per anno -------------------------
+        profit_index_array = []
+
+        for i in range(fcf_matrix.shape[0]):
+            fcf = fcf_pv_matrix[i, :]
+            npv_cum = np.cumsum(fcf)
+            cost_total = np.abs(costs_fixed) + np.abs(capex)
+            cost_total =  cost_total /((1+discount_rate) ** np.arange(1, years + 1))
+            cost_total_cum = np.cumsum(cost_total)
+            profit_index_array.append(npv_cum/cost_total_cum)
+
+        profit_index_array = np.array(profit_index_array)
+
+        # Percentili PPI per anno
+        ppi_min = np.nanmin(profit_index_array, axis=0)
+        ppi_p5 = np.nanpercentile(profit_index_array, 5, axis=0)
+        ppi_p50 = np.nanpercentile(profit_index_array, 50, axis=0)
+        ppi_p95 = np.nanpercentile(profit_index_array, 95, axis=0)
+        ppi_max = np.nanmax(profit_index_array, axis=0)
+
+
         # Percentili IRR per anno
         irr_min = np.nanmin(irr_matrix, axis=0)
         irr_p5 = np.nanpercentile(irr_matrix, 5, axis=0)
@@ -157,6 +178,7 @@ if st.session_state.logged_in:
         st.pyplot(plot_cumulative_npv(npv_cum_matrix, project_name))
         st.pyplot(plot_payback_distribution(payback_array, project_name))
         st.pyplot(plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
+        st.pyplot(plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=df['Anno'].to_list(), title="Andamento PPI per anno", figsize=(10,6)))
         
     
         # ------------------------- KRI Gauges -------------------------
@@ -210,6 +232,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
