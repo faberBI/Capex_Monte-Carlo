@@ -217,11 +217,9 @@ if st.session_state.logged_in:
             p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
             pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
         
-    
             # Payback period
             pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
-        
-        
+         
             # Percentili IRR
             pd.DataFrame({
             'Anno': years_col,
@@ -231,10 +229,21 @@ if st.session_state.logged_in:
             'IRR_p95': irr_p95,
             'IRR_max': irr_max,
             }).to_excel(writer, index=False, sheet_name='IRR_percentili')
-    
+
+            # Percentili IRR
+            pd.DataFrame({
+            'Anno': years_col,
+            'PPI_min': ppi_min,
+            'PPI_p5': ppi_p5,
+            'PPI_p50': ppi_p50,
+            'PPI_p95': ppi_p95,
+            'PPI_max': ppi_max,
+            }).to_excel(writer, index=False, sheet_name='PPI_percentili')
+
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
