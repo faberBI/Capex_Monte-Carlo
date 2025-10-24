@@ -99,7 +99,8 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         fcf_pv_matrix[i, :] = fcf_pv
         npv_cum_matrix[i, :] = npv_cum
 
-    return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col
+    return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed
+
 
 
 
