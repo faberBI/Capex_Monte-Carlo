@@ -134,17 +134,20 @@ if st.session_state.logged_in:
                     irr_matrix[i, j] = 0
 
         # ------------------------- PROFITABILITY INDEX per anno -------------------------
+        years = fcf_matrix.shape[1] 
         profit_index_array = []
 
         for i in range(fcf_matrix.shape[0]):
             fcf = fcf_pv_matrix[i, :]
             npv_cum = np.cumsum(fcf)
             cost_total = np.abs(costs_fixed) + np.abs(capex)
-            cost_total =  cost_total /((1+discount_rate) ** np.arange(1, years + 1))
+            cost_total = cost_total / ((1 + discount_rate) ** np.arange(1, years + 1))
             cost_total_cum = np.cumsum(cost_total)
-            profit_index_array.append(npv_cum/cost_total_cum)
+
+            profit_index_array.append(npv_cum / cost_total_cum)
 
         profit_index_array = np.array(profit_index_array)
+
 
         # Percentili PPI per anno
         ppi_min = np.nanmin(profit_index_array, axis=0)
@@ -232,6 +235,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
