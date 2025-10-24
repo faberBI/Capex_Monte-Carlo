@@ -94,7 +94,7 @@ if st.session_state.logged_in:
     if run_button and uploaded_file is not None:
         if seed !=0:
             np.random.seed(int(seed))
-        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed = run_simulations(df, int(n_sim), float(discount_rate), float(tax_rate))
+        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(df, int(n_sim), float(discount_rate), float(tax_rate))
     
         payback_array = []
         N4_array = np.arange(fcf_matrix.shape[1]) + 1/6  # frazione iniziale anno
@@ -232,6 +232,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
