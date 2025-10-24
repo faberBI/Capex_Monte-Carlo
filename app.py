@@ -32,7 +32,7 @@ st.markdown("""
 NPV @Risk Simulation Tool by ERM
 </h1>
 <p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>
-Simula scenari finanziari e analizza il rischio con la potenza della Monte Carlo
+Simula scenari finanziari e analizza i progetti di investimento con DCF
 </p>
 </div>
 """, unsafe_allow_html=True)
@@ -243,6 +243,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
