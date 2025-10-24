@@ -241,3 +241,14 @@ def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=Non
     
     return fig
 
+
+def plot_ppi_distribution(payback_array, name):
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.hist(payback_array[~np.isnan(payback_array)], bins=range(1, int(np.nanmax(payback_array))+2),
+            color="#f97316", edgecolor='black', alpha=0.7)
+    ax.set_xlabel("Anno payback")
+    ax.set_ylabel("Frequenza")
+    ax.set_title(f"Distribuzione profitability index period - {name}")
+    return fig
+
+
