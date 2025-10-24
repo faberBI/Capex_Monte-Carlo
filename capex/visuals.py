@@ -242,13 +242,48 @@ def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=Non
     return fig
 
 
-def plot_ppi_distribution(payback_array, name):
-    fig, ax = plt.subplots(figsize=(8,5))
-    ax.hist(payback_array[~np.isnan(payback_array)], bins=range(1, int(np.nanmax(payback_array))+2),
-            color="#f97316", edgecolor='black', alpha=0.7)
-    ax.set_xlabel("Anno payback")
-    ax.set_ylabel("Frequenza")
-    ax.set_title(f"Distribuzione profitability index period - {name}")
+def plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=None,
+                    title="Andamento PPI per anno", figsize=(10,6)):
+    """
+    Grafico andamento PPI per anno con percentili, IRR in %, anni personalizzati.
+    
+    Parametri:
+    - ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max: array dei percentili per anno
+    - years_labels: lista o array degli anni reali (es. [2025, 2026, ...])
+    - title: titolo del grafico
+    - figsize: dimensione della figura
+    
+    Ritorna:
+    - fig: figura matplotlib pronta da visualizzare
+    """
+    
+    # Converti IRR in percentuale
+  
+    n_years = len(ppi_min)
+    
+    if years_labels is None:
+        years_labels = np.arange(1, n_years + 1)
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Area tra 5° e 95°
+    ax.fill_between(years_labels, ppi_p5, ppi_p95, color='lightblue', alpha=0.5, label='5-95 percentile')
+    
+    # Linea mediana
+    ax.plot(years_labels, ppi_p50, color='blue', linewidth=2, label='Mediana (50° percentile)')
+    
+    # Linee estreme (min e max)
+    ax.plot(years_labels, ppi_min, '--', color='gray', linewidth=1, label='Min')
+    ax.plot(years_labels, ppi_max, '--', color='gray', linewidth=1, label='Max')
+    
+    ax.set_xlabel("Anno")
+    ax.set_ylabel("Profitability Index")
+    ax.set_title(title)
+    ax.set_xticks(years_labels)
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.5)
+    
     return fig
+
 
 
