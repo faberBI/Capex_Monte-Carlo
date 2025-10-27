@@ -35,14 +35,14 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     rev_mode = df.get('Revenues piano', pd.Series(0)).values
     rev_max = df.get('Revenues max', pd.Series(0)).values
       
-    #rev_min_1 = df.get('Revenues min 2', pd.Series(0)).values
-    #rev_mode_1 = df.get('Revenues piano 2', pd.Series(0)).values
-    #rev_max_1 = df.get('Revenues max 2', pd.Series(0)).values
+    rev_min_1 = df.get('Revenues min 2', pd.Series(0)).values
+    rev_mode_1 = df.get('Revenues piano 2', pd.Series(0)).values
+    rev_max_1 = df.get('Revenues max 2', pd.Series(0)).values
      
     # Costi variabili
-    #cs_min = df.get('Cost Saving min', pd.Series(0)).values
-    #cs_mode = df.get('Cost Saving piano', pd.Series(0)).values
-    #cs_max = df.get('Cost Saving max', pd.Series(0)).values
+    cs_min = df.get('Cost Saving min', pd.Series(0)).values
+    cs_mode = df.get('Cost Saving piano', pd.Series(0)).values
+    cs_max = df.get('Cost Saving max', pd.Series(0)).values
     
     # Costi fissi
     costs_fixed = df.get('Costs fixed', pd.Series(0)).values
@@ -64,21 +64,21 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         # Generazione valori stocastici triangolari
         rev_samp = triangular_sample(rev_min, rev_mode, rev_max, years)
                 
-        #if cs_mode.sum() == 0:
-        #    cs_samp = np.zeros_like(rev_samp)  # oppure np.zeros(years)
-        #else:
-        #    cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
+        if cs_mode.sum() == 0:
+            cs_samp = np.zeros_like(rev_samp)  # oppure np.zeros(years)
+        else:
+            cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
 
-        #if rev_mode_1.sum() == 0:
-        #    rev_samp2 = np.zeros_like(rev_samp)  # oppure np.zeros(years)
-        #else:
-        #     rev_samp2 = triangular_sample(rev_min_1, rev_mode_1, rev_max_1, years)
+        if rev_mode_1.sum() == 0:
+            rev_samp2 = np.zeros_like(rev_samp)  # oppure np.zeros(years)
+        else:
+             rev_samp2 = triangular_sample(rev_min_1, rev_mode_1, rev_max_1, years)
 
         # 1. EBITDA contribution
-        revenue = rev_samp
-        #revenue = (rev_samp + rev_samp2 )
-        costi = costs_fixed
-        #costi = (cs_samp + costs_fixed)
+        #revenue = rev_samp
+        revenue = (rev_samp + rev_samp2 )
+        #costi = costs_fixed
+        costi = (cs_samp + costs_fixed)
         
         ebitda = revenue + costi
 
@@ -106,6 +106,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
