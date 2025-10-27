@@ -34,8 +34,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     rev_min = df.get('Revenues min', pd.Series(0)).values
     rev_mode = df.get('Revenues piano', pd.Series(0)).values
     rev_max = df.get('Revenues max', pd.Series(0)).values
-    
-    
+      
     rev_min_1 = df.get('Revenues min 2', pd.Series(0)).values
     rev_mode_1 = df.get('Revenues piano 2', pd.Series(0)).values
     rev_max_1 = df.get('Revenues max 2', pd.Series(0)).values
@@ -73,8 +72,10 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
 
         # 1. EBITDA contribution
         revenue = (rev_samp + rev_samp2 )
+
+        costi = (cs_samp + costs_fixed)
         
-        ebitda = revenue + cs_samp + costs_fixed
+        ebitda = revenue + costi
 
         # 2. EBIT contribution
         ebit = ebitda + amort  # ammortamenti negativi
@@ -100,6 +101,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
