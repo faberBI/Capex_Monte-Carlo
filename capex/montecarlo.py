@@ -66,18 +66,16 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
                 
         if cs_mode.sum() == 0:
             cs_samp = np.zeros_like(rev_samp)  # oppure np.zeros(years)
-         else:
+        else:
             cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
 
         if rev_mode_1.sum() == 0:
             rev_samp2 = np.zeros_like(rev_samp)  # oppure np.zeros(years)
-         else:
-             rev_samp2 = triangular_sample(rev_min_1, rev_mode_1, rev_max_1, years)
+        else:
+            rev_samp2 = triangular_sample(rev_min_1, rev_mode_1, rev_max_1, years)
 
         # 1. EBITDA contribution
-        # revenue = rev_samp
         revenue = (rev_samp + rev_samp2 )
-        costi = costs_fixed
         costi = (cs_samp + costs_fixed)
         
         ebitda = revenue + costi
@@ -106,6 +104,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
