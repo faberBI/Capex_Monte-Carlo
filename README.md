@@ -43,7 +43,8 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
   * **Probabilità NPV < 0**.
   * **CVaR (Conditional VaR 95%)**.
   * **IRR distribution**.
-  * ** Payback to period distribution**.
+  * **Payback to period distribution**.
+  * **Profitability index distribution**.
 
 ### 📊 Visualizzazioni
 
