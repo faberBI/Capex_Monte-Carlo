@@ -29,63 +29,52 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     npv_cum_matrix = np.zeros((n_sim, years))
     years_col = df.iloc[:, 0].values
 
-    # Ricavi
+    # Estraggo colonne
     rev_min = df.get('Revenues min', pd.Series(0)).values
     rev_mode = df.get('Revenues piano', pd.Series(0)).values
     rev_max = df.get('Revenues max', pd.Series(0)).values
-
-    # Costi variabili
     cs_min = df.get('Cost var min', pd.Series(0)).values
     cs_mode = df.get('Cost var piano', pd.Series(0)).values
     cs_max = df.get('Cost var max', pd.Series(0)).values
-
-    # Costi fissi
     costs_fixed = df.get('Costs fixed', pd.Series(0)).values
-
-    # Ammortamento
     amort = df.get('Amort. & Depreciation', pd.Series(0)).values
-
-    # Capex
     capex = df.get('Capex', pd.Series(0)).values
-
-    # Disposal
     disposal = df.get('Disposal & Capex Saving', pd.Series(0)).values
-
-    # Change in working cap.
     change_wc = df.get('Change in working cap.', pd.Series(0)).values
 
     for i in range(n_sim):
-        # Ricavi: se il piano è zero, non calcolo triangolare
-        revenue = np.zeros(years)
+        fcf = np.zeros(years)
+
         for y in range(years):
+            # Ricavi
             if rev_mode[y] == 0:
-                revenue[y] = 0
+                revenue = 0
             else:
-                revenue[y] = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+                revenue = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
 
-        # Costi variabili
-        if cs_mode.sum() == 0:
-            cs_samp = np.zeros(years)
-        else:
-            cs_samp = np.array([np.random.triangular(cs_min[y], cs_mode[y], cs_max[y]) for y in range(years)])
+            # Costi variabili
+            if cs_mode[y] == 0:
+                cs = 0
+            else:
+                cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
 
-        # 1. EBITDA
-        costi = cs_samp + costs_fixed
-        ebitda = revenue + costi  # costi negativi → corretta somma
+            # EBITDA
+            ebitda = revenue + cs + costs_fixed[y]
 
-        # 2. EBIT
-        ebit = ebitda + amort  # ammortamenti negativi
+            # EBIT
+            ebit = ebitda + amort[y]
 
-        # 3. Tasse (sempre calcolate, beneficio fiscale se EBIT < 0)
-        taxes = -ebit * tax_rate
+            # Tasse
+            taxes = -ebit * tax_rate
 
-        # 4. FCF
-        fcf = ebitda + taxes + capex + disposal + change_wc
-        # 5. Sconto DCF
+            # FCF per anno
+            fcf[y] = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
+
+        # Sconto DCF
         discounts = (1 + discount_rate) ** np.arange(1, years + 1)
         fcf_pv = fcf / discounts
 
-        # 6. NPV e cumulati
+        # NPV e cumulati
         npv = np.sum(fcf_pv)
         npv_cum = np.cumsum(fcf_pv)
 
@@ -96,6 +85,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
