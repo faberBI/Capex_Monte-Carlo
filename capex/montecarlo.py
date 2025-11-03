@@ -75,10 +75,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         # 2. EBIT contribution
         ebit = ebitda + amort  # ammortamenti negativi
 
-        if ebit<0:
-            taxes = np.abs(ebit*tax_rate)
-        else:
-            taxes = (ebit*tax_rate)*-1
+        taxes = -ebit * tax_rate
 
         # 4. FCF: se EBITDA == 0 allora FCF = |tasse|, altrimenti formula standard
         fcf = ebitda + taxes + capex + disposal + change_wc  # segni già corretti
@@ -98,6 +95,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
