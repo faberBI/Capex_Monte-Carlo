@@ -18,10 +18,8 @@ from PIL import Image
 import streamlit as st
 
 
-
-
-
 def run_simulations(df, n_sim, discount_rate, tax_rate):
+    # Numero anni
     years = df.shape[0]
     npv_list = []
     fcf_matrix = np.zeros((n_sim, years))
@@ -29,18 +27,18 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     npv_cum_matrix = np.zeros((n_sim, years))
     years_col = df.iloc[:, 0].values
 
-    # Estraggo colonne
-    rev_min = df.get('Revenues min', pd.Series(0)).values
-    rev_mode = df.get('Revenues piano', pd.Series(0)).values
-    rev_max = df.get('Revenues max', pd.Series(0)).values
-    cs_min = df.get('Cost var min', pd.Series(0)).values
-    cs_mode = df.get('Cost var piano', pd.Series(0)).values
-    cs_max = df.get('Cost var max', pd.Series(0)).values
-    costs_fixed = df.get('Costs fixed', pd.Series(0)).values
-    amort = df.get('Amort. & Depreciation', pd.Series(0)).values
-    capex = df.get('Capex', pd.Series(0)).values
-    disposal = df.get('Disposal & Capex Saving', pd.Series(0)).values
-    change_wc = df.get('Change in working cap.', pd.Series(0)).values
+    # Estraggo colonne con fallback a zero
+    rev_min = df.get('Revenues min', pd.Series([0]*years)).values
+    rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
+    rev_max = df.get('Revenues max', pd.Series([0]*years)).values
+    cs_min = df.get('Cost var min', pd.Series([0]*years)).values
+    cs_mode = df.get('Cost var piano', pd.Series([0]*years)).values
+    cs_max = df.get('Cost var max', pd.Series([0]*years)).values
+    costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
+    amort = df.get('Amort. & Depreciation', pd.Series([0]*years)).values
+    capex = df.get('Capex', pd.Series([0]*years)).values
+    disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+    change_wc = df.get('Change in working cap.', pd.Series([0]*years)).values
 
     for i in range(n_sim):
         fcf = np.zeros(years)
@@ -64,7 +62,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
             # EBIT
             ebit = ebitda + amort[y]
 
-            # Tasse
+            # Tasse (beneficio fiscale se EBIT < 0)
             taxes = -ebit * tax_rate
 
             # FCF per anno
@@ -313,6 +311,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
