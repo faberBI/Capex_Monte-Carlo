@@ -8,7 +8,7 @@ import numpy_financial as npf
 
 from capex.visuals import (plot_npv_distribution, plot_boxplot, plot_cashflows , plot_cumulative_npv, plot_payback_distribution, plot_probs_kri, plot_car_kri, plot_irr_trends, plot_ppi_distribution)
 
-from capex.montecarlo import (triangular_sample, run_simulations)
+from capex.montecarlo import triangular_sample
 
 import hashlib
 from oauth2client.service_account import ServiceAccountCredentials
@@ -19,11 +19,11 @@ import streamlit as st
 
 
 def run_simulations(df, n_sim, discount_rate, tax_rate):
-    # Numero anni
+    # Numero di anni e colonna anni
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
-    # Estraggo colonne con fallback a zero
+    # Estrazione colonne con fallback a 0 se mancanti
     rev_min = df.get('Revenues min', pd.Series([0]*years)).values
     rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
     rev_max = df.get('Revenues max', pd.Series([0]*years)).values
@@ -31,54 +31,67 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     cs_mode = df.get('Cost var piano', pd.Series([0]*years)).values
     cs_max = df.get('Cost var max', pd.Series([0]*years)).values
     costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
-    amort = df.get('Amort. & Depreciation', pd.Series([0]*years)).values
+    amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).values
     capex = df.get('Capex', pd.Series([0]*years)).values
     disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
-    change_wc = df.get('Change in working cap.', pd.Series([0]*years)).values
+    change_wc = df.get('Change in working cap,', pd.Series([0]*years)).values
 
-    # Matrici per risultati
+    # Matrici risultati
     fcf_matrix = np.zeros((n_sim, years))
     fcf_pv_matrix = np.zeros((n_sim, years))
     npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
 
-    # Loop invertito: per ogni anno, calcolo n_sim scenari
+    # Simulazioni Monte Carlo
     for y in range(years):
         for i in range(n_sim):
             # Ricavi
-            revenue = 0 if rev_mode[y] == 0 else np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+            if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
+                revenue = 0
+            else:
+                revenue = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
 
             # Costi variabili
-            cs = 0 if cs_mode[y] == 0 else np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
+            if cs_min[y] == cs_mode[y] == cs_max[y] == 0:
+                cs = 0
+            else:
+                cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
 
-            # EBITDA
+            # EBITDA (tutti i costi nel df sono negativi)
             ebitda = revenue + cs + costs_fixed[y]
 
             # EBIT
             ebit = ebitda + amort[y]
 
-            # Tasse (beneficio fiscale se EBIT < 0)
+            # Tasse (negative se costo, positive se beneficio)
             taxes = -ebit * tax_rate
 
-            # FCF per anno
+            # FCF (tutti i costi già negativi)
             fcf = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
 
-            # Sconto DCF per anno
+            # Sconto DCF
             discount = (1 + discount_rate) ** (y + 1)
             fcf_pv = fcf / discount
 
-            # Salvataggio nei vettori
+            # Salva risultati
             fcf_matrix[i, y] = fcf
             fcf_pv_matrix[i, y] = fcf_pv
 
-    # Calcolo NPV e cumulati per ogni simulazione
+    # Calcolo NPV e cumulati
     for i in range(n_sim):
         npv = np.sum(fcf_pv_matrix[i, :])
         npv_cum = np.cumsum(fcf_pv_matrix[i, :])
         npv_list.append(npv)
         npv_cum_matrix[i, :] = npv_cum
 
-    return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+    return (np.array(npv_list),
+        fcf_matrix,
+        fcf_pv_matrix,
+        npv_cum_matrix,
+        years_col,
+        costs_fixed,
+        capex
+    )
 
 
 # Carica il logo
@@ -307,6 +320,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
