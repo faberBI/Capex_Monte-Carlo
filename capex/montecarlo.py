@@ -59,7 +59,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     for i in range(n_sim):
         
         # Generazione valori stocastici triangolari
-        rev_samp = triangular_sample(rev_min, rev_mode, rev_max, years)
+        revenue = triangular_sample(rev_min, rev_mode, rev_max, years)
                 
         if cs_mode.sum() == 0:
             cs_samp = np.zeros(years)
@@ -67,7 +67,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
             cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
 
         # 1. EBITDA contribution
-        revenue = rev_samp
+        
         costi = (cs_samp + costs_fixed)
         
         ebitda = revenue + costi
@@ -77,11 +77,8 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
 
         taxes = -ebit * tax_rate
 
-        if taxes>0:
-            fcf = capex + taxes + disposal + ebitda
-        else:
-            fcf = ebitda + taxes + capex + disposal + change_wc  # segni già corretti
-
+        fcf = ebitda + taxes + capex + disposal + change_wc 
+        
         # 5. FCF present value
         discounts = (1 + discount_rate) ** np.arange(1, years + 1)
         fcf_pv = fcf / discounts
@@ -97,6 +94,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
+
 
 
 
