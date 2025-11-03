@@ -22,41 +22,37 @@ def triangular_sample(min_v, mode_v, max_v, size):
     return result
 
 def run_simulations(df, n_sim, discount_rate, tax_rate):
+    # Numero anni
     years = df.shape[0]
-    npv_list = []
+    years_col = df.iloc[:, 0].values
+
+    # Estraggo colonne con fallback a zero
+    rev_min = df.get('Revenues min', pd.Series([0]*years)).values
+    rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
+    rev_max = df.get('Revenues max', pd.Series([0]*years)).values
+    cs_min = df.get('Cost var min', pd.Series([0]*years)).values
+    cs_mode = df.get('Cost var piano', pd.Series([0]*years)).values
+    cs_max = df.get('Cost var max', pd.Series([0]*years)).values
+    costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
+    amort = df.get('Amort. & Depreciation', pd.Series([0]*years)).values
+    capex = df.get('Capex', pd.Series([0]*years)).values
+    disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+    change_wc = df.get('Change in working cap.', pd.Series([0]*years)).values
+
+    # Matrici per risultati
     fcf_matrix = np.zeros((n_sim, years))
     fcf_pv_matrix = np.zeros((n_sim, years))
     npv_cum_matrix = np.zeros((n_sim, years))
-    years_col = df.iloc[:, 0].values
+    npv_list = []
 
-    # Estraggo colonne
-    rev_min = df.get('Revenues min', pd.Series(0)).values
-    rev_mode = df.get('Revenues piano', pd.Series(0)).values
-    rev_max = df.get('Revenues max', pd.Series(0)).values
-    cs_min = df.get('Cost var min', pd.Series(0)).values
-    cs_mode = df.get('Cost var piano', pd.Series(0)).values
-    cs_max = df.get('Cost var max', pd.Series(0)).values
-    costs_fixed = df.get('Costs fixed', pd.Series(0)).values
-    amort = df.get('Amort. & Depreciation', pd.Series(0)).values
-    capex = df.get('Capex', pd.Series(0)).values
-    disposal = df.get('Disposal & Capex Saving', pd.Series(0)).values
-    change_wc = df.get('Change in working cap.', pd.Series(0)).values
-
-    for i in range(n_sim):
-        fcf = np.zeros(years)
-
-        for y in range(years):
+    # Loop invertito: per ogni anno, calcolo n_sim scenari
+    for y in range(years):
+        for i in range(n_sim):
             # Ricavi
-            if rev_mode[y] == 0:
-                revenue = 0
-            else:
-                revenue = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+            revenue = 0 if rev_mode[y] == 0 else np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
 
             # Costi variabili
-            if cs_mode[y] == 0:
-                cs = 0
-            else:
-                cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
+            cs = 0 if cs_mode[y] == 0 else np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
 
             # EBITDA
             ebitda = revenue + cs + costs_fixed[y]
@@ -64,24 +60,25 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
             # EBIT
             ebit = ebitda + amort[y]
 
-            # Tasse
+            # Tasse (beneficio fiscale se EBIT < 0)
             taxes = -ebit * tax_rate
 
             # FCF per anno
-            fcf[y] = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
+            fcf = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
 
-        # Sconto DCF
-        discounts = (1 + discount_rate) ** np.arange(1, years + 1)
-        fcf_pv = fcf / discounts
+            # Sconto DCF per anno
+            discount = (1 + discount_rate) ** (y + 1)
+            fcf_pv = fcf / discount
 
-        # NPV e cumulati
-        npv = np.sum(fcf_pv)
-        npv_cum = np.cumsum(fcf_pv)
+            # Salvataggio nei vettori
+            fcf_matrix[i, y] = fcf
+            fcf_pv_matrix[i, y] = fcf_pv
 
-        # Salvataggio
+    # Calcolo NPV e cumulati per ogni simulazione
+    for i in range(n_sim):
+        npv = np.sum(fcf_pv_matrix[i, :])
+        npv_cum = np.cumsum(fcf_pv_matrix[i, :])
         npv_list.append(npv)
-        fcf_matrix[i, :] = fcf
-        fcf_pv_matrix[i, :] = fcf_pv
         npv_cum_matrix[i, :] = npv_cum
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
