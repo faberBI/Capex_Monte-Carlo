@@ -22,7 +22,6 @@ import streamlit as st
 
 
 def run_simulations(df, n_sim, discount_rate, tax_rate):
-    
     years = df.shape[0]
     npv_list = []
     fcf_matrix = np.zeros((n_sim, years))
@@ -34,51 +33,55 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     rev_min = df.get('Revenues min', pd.Series(0)).values
     rev_mode = df.get('Revenues piano', pd.Series(0)).values
     rev_max = df.get('Revenues max', pd.Series(0)).values
-         
+
     # Costi variabili
     cs_min = df.get('Cost var min', pd.Series(0)).values
     cs_mode = df.get('Cost var piano', pd.Series(0)).values
     cs_max = df.get('Cost var max', pd.Series(0)).values
-    
+
     # Costi fissi
     costs_fixed = df.get('Costs fixed', pd.Series(0)).values
-    
+
     # Ammortamento
     amort = df.get('Amort. & Depreciation', pd.Series(0)).values
-    
+
     # Capex
     capex = df.get('Capex', pd.Series(0)).values
-    
-    #Disposal
+
+    # Disposal
     disposal = df.get('Disposal & Capex Saving', pd.Series(0)).values
-    
-    #Change in working cap.
+
+    # Change in working cap.
     change_wc = df.get('Change in working cap.', pd.Series(0)).values
 
     for i in range(n_sim):
-        
-        # Generazione valori stocastici triangolari
-        revenue = triangular_sample(rev_min, rev_mode, rev_max, years)
-                
+        # Ricavi: se il piano è zero, non calcolo triangolare
+        revenue = np.zeros(years)
+        for y in range(years):
+            if rev_mode[y] == 0:
+                revenue[y] = 0
+            else:
+                revenue[y] = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+
+        # Costi variabili
         if cs_mode.sum() == 0:
             cs_samp = np.zeros(years)
         else:
-            cs_samp = triangular_sample(cs_min, cs_mode, cs_max, years)
+            cs_samp = np.array([np.random.triangular(cs_min[y], cs_mode[y], cs_max[y]) for y in range(years)])
 
-        # 1. EBITDA contribution
-        
-        costi = (cs_samp + costs_fixed)
-        
-        ebitda = revenue + costi
+        # 1. EBITDA
+        costi = cs_samp + costs_fixed
+        ebitda = revenue + costi  # costi negativi → corretta somma
 
-        # 2. EBIT contribution
-        ebit = ebitda + amort  
+        # 2. EBIT
+        ebit = ebitda + amort  # ammortamenti negativi
 
+        # 3. Tasse (sempre calcolate, beneficio fiscale se EBIT < 0)
         taxes = -ebit * tax_rate
 
-        fcf = ebitda + taxes + capex + disposal + change_wc 
-        
-        # 5. FCF present value
+        # 4. FCF
+        fcf = ebitda + taxes + capex + disposal + change_wc
+        # 5. Sconto DCF
         discounts = (1 + discount_rate) ** np.arange(1, years + 1)
         fcf_pv = fcf / discounts
 
@@ -86,7 +89,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         npv = np.sum(fcf_pv)
         npv_cum = np.cumsum(fcf_pv)
 
-        # Salvataggio risultati
+        # Salvataggio
         npv_list.append(npv)
         fcf_matrix[i, :] = fcf
         fcf_pv_matrix[i, :] = fcf_pv
@@ -321,6 +324,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
