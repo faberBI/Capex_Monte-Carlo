@@ -33,7 +33,9 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
     amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).values
     capex = df.get('Capex', pd.Series([0]*years)).values
-    disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+    disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).values
+    disposal_max = df.get('Disposal & Capex Saving max', pd.Series([0]*years)).values
     change_wc = df.get('Change in working cap,', pd.Series([0]*years)).values
 
     # Matrici risultati
@@ -56,6 +58,12 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
                 cs = 0
             else:
                 cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
+            
+            # Disposal    
+            if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0:
+                disposal = 0
+            else:
+                disposal = np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y])
 
             # EBITDA (tutti i costi nel df sono negativi)
             ebitda = revenue + cs + costs_fixed[y]
@@ -67,7 +75,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
             taxes = -ebit * tax_rate
 
             # FCF (tutti i costi già negativi)
-            fcf = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
+            fcf = ebitda + taxes + capex[y] + disposal + change_wc[y]
 
             # Sconto DCF
             discount = (1 + discount_rate) ** (y + 1)
@@ -320,6 +328,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
