@@ -5,25 +5,23 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
-
-from capex.visuals import (plot_npv_distribution, plot_boxplot, plot_cashflows , plot_cumulative_npv, plot_payback_distribution, plot_probs_kri, plot_car_kri, plot_irr_trends, plot_ppi_distribution)
-
-from capex.montecarlo import triangular_sample
-
 import hashlib
-from oauth2client.service_account import ServiceAccountCredentials
 import json
-
 from PIL import Image
-import streamlit as st
 
+from capex.visuals import (
+    plot_npv_distribution, plot_boxplot, plot_cashflows, plot_cumulative_npv, 
+    plot_payback_distribution, plot_probs_kri, plot_car_kri, plot_irr_trends, plot_ppi_distribution
+)
 
-def run_simulations(df, n_sim, discount_rate, tax_rate):
-    # Numero di anni e colonna anni
+# -----------------------------
+# Funzione Monte Carlo con shift multistep
+# -----------------------------
+def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
-    # Estrazione colonne con fallback a 0 se mancanti
+    # Estrazione colonne
     rev_min = df.get('Revenues min', pd.Series([0]*years)).values
     rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
     rev_max = df.get('Revenues max', pd.Series([0]*years)).values
@@ -33,9 +31,8 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
     amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).values
     capex = df.get('Capex', pd.Series([0]*years)).values
-    disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
-    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
     disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).values
+    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
     disposal_max = df.get('Disposal & Capex Saving max', pd.Series([0]*years)).values
     change_wc = df.get('Change in working cap,', pd.Series([0]*years)).values
 
@@ -45,90 +42,64 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
     npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
 
-    # Simulazioni Monte Carlo
-    for y in range(years):
-        for i in range(n_sim):
-            # Ricavi
-            if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
-                revenue = 0
-            else:
-                revenue = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+    for i in range(n_sim):
+        # Genero flussi iniziali
+        revenue_arr = np.array([np.random.triangular(rev_min[y], rev_mode[y], rev_max[y]) for y in range(years)])
+        cs_arr = np.array([np.random.triangular(cs_min[y], cs_mode[y], cs_max[y]) for y in range(years)])
+        capex_arr = np.array([capex[y] for y in range(years)])
 
-            # Costi variabili
-            if cs_min[y] == cs_mode[y] == cs_max[y] == 0:
-                cs = 0
-            else:
-                cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
-            
-            # Disposal    
-            if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0:
-                disposal = 0
-            else:
-                disposal = np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y])
+        # Applico shift multistep
+        for y in range(years):
+            max_shift = years - y - 1
+            if max_shift > 0:
+                shift_probs_trimmed = shift_probs[:max_shift+1]
+                shift_probs_trimmed = shift_probs_trimmed / shift_probs_trimmed.sum()
 
-            # EBITDA (tutti i costi nel df sono negativi)
-            ebitda = revenue + cs + costs_fixed[y]
+                # Ricavi
+                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
+                if shift_year != 0:
+                    revenue_arr[y+shift_year] += revenue_arr[y]
+                    revenue_arr[y] = 0
+                # Costi variabili
+                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
+                if shift_year != 0:
+                    cs_arr[y+shift_year] += cs_arr[y]
+                    cs_arr[y] = 0
+                # Capex
+                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
+                if shift_year != 0:
+                    capex_arr[y+shift_year] += capex_arr[y]
+                    capex_arr[y] = 0
 
-            # EBIT
+        # Calcolo FCF e DCF
+        for y in range(years):
+            ebitda = revenue_arr[y] + cs_arr[y] + costs_fixed[y]
             ebit = ebitda + amort[y]
-
-            # Tasse (negative se costo, positive se beneficio)
             taxes = -ebit * tax_rate
-
-            # FCF (tutti i costi già negativi)
-            fcf = ebitda + taxes + capex[y] + disposal[y] + change_wc[y]
-            fcf = ebitda + taxes + capex[y] + disposal + change_wc[y]
-
-            # Sconto DCF
+            disposal = np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y])
+            fcf = ebitda + taxes + capex_arr[y] + disposal + change_wc[y]
             discount = (1 + discount_rate) ** (y + 1)
             fcf_pv = fcf / discount
 
-            # Salva risultati
             fcf_matrix[i, y] = fcf
             fcf_pv_matrix[i, y] = fcf_pv
 
-    # Calcolo NPV e cumulati
-    for i in range(n_sim):
         npv = np.sum(fcf_pv_matrix[i, :])
-        npv_cum = np.cumsum(fcf_pv_matrix[i, :])
+        npv_cum_matrix[i, :] = np.cumsum(fcf_pv_matrix[i, :])
         npv_list.append(npv)
-        npv_cum_matrix[i, :] = npv_cum
 
-    return (np.array(npv_list),
-        fcf_matrix,
-        fcf_pv_matrix,
-        npv_cum_matrix,
-        years_col,
-        costs_fixed,
-        capex
-    )
+    return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
 
-
-# Carica il logo
+# -----------------------------
+# Streamlit UI
+# -----------------------------
 logo = Image.open("Image/logo_fibercop.PNG")
+st.set_page_config(page_title="NPV @Risk Tool", page_icon=logo , layout="wide")
+st.image(logo, width=300)
+st.markdown("<h1 style='color:white'>NPV @Risk Simulation Tool</h1>", unsafe_allow_html=True)
 
-st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon=logo , layout="wide")
-st.markdown("""
-<div style='text-align: center;'>
-""", unsafe_allow_html=True)
-
-st.image(logo, width=300)  # logo centrato grazie al div
-
-st.markdown("""
-<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>
-NPV @Risk Simulation Tool by ERM
-</h1>
-<p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>
-Simula scenari finanziari e analizza i progetti di investimento con DCF
-</p>
-</div>
-""", unsafe_allow_html=True)
-
-# -----------------------------
-# LOGIN SICURO
-# -----------------------------
+# Login
 st.sidebar.title("🔐 Login")
-
 with open("users.json") as f:
     users = json.load(f)
 
@@ -157,176 +128,133 @@ else:
     st.sidebar.success(f"Benvenuto {st.session_state.username}")
 
 # -----------------------------
-# CONTENUTO DELL'APP
+# Parametri simulazione
 # -----------------------------
 if st.session_state.logged_in:
-
-# ------------------------- Streamlit UI -------------------------
-    st.title("NPV @Risk Simulation Tool by ERM ")
-
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
-
-    with st.sidebar:
-        project_name = st.text_input("Nome progetto", value="Progetto 1")
-        discount_rate = st.number_input("Tasso di sconto (es. 0.10)", value=0.10, step=0.01, format="%.4f")
-        tax_rate = st.number_input("Aliquota fiscale (es. 0.25)", value=0.25, step=0.01, format="%.4f")
-        n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
-        seed = st.number_input("Seed (0=random)", value=0)
-        run_button = st.button("Esegui simulazione")
-
-    if uploaded_file is not None:
+    if uploaded_file:
         df = pd.read_excel(uploaded_file)
         st.dataframe(df)
 
-    if run_button and uploaded_file is not None:
-        if seed !=0:
-            np.random.seed(int(seed))
-        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(df, int(n_sim), float(discount_rate), float(tax_rate))
+        project_name = st.text_input("Nome progetto", value="Progetto 1")
+        discount_rate = st.number_input("Tasso di sconto", value=0.1)
+        tax_rate = st.number_input("Aliquota fiscale", value=0.25)
+        n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=50000, value=2000)
+        seed = st.number_input("Seed (0=random)", value=0)
 
-        payback_array = []
-        N4_array = np.arange(fcf_matrix.shape[1]) + 1/6  # frazione iniziale anno
+        st.sidebar.markdown("### Shift probabilistici multistep")
+        shift_0 = st.sidebar.slider("Probabilità rimanere stesso anno", 0.0, 1.0, 0.3)
+        shift_1 = st.sidebar.slider("Probabilità shift 1 anno", 0.0, 1.0, 0.5)
+        shift_2 = st.sidebar.slider("Probabilità shift 2 anni", 0.0, 1.0, 0.2)
+        shift_probs = np.array([shift_0, shift_1, shift_2])
+        shift_probs = shift_probs / shift_probs.sum()  # Normalizzo
 
-        for i in range(fcf_matrix.shape[0]):
-            npv_cum = np.cumsum(fcf_pv_matrix[i,:])
-            pb = np.nan  # default se NPV cumulato resta negativo
+        if st.button("Esegui simulazione"):
+            if seed != 0:
+                np.random.seed(int(seed))
+            npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
+                df, n_sim, discount_rate, tax_rate, shift_probs
+            )
 
-            for j in range(len(npv_cum)):
-                M19 = npv_cum[j-1] if j > 0 else 0
-                N19 = npv_cum[j]
-                N4 = N4_array[j]
+            # ------------------------- Calcolo metriche principali -------------------------
+            expected_npv = np.mean(npv_array)
+            percentile_5 = np.percentile(npv_array, 5)
+            downside_prob = np.mean(npv_array<0)
 
-                if N19 >= 0:
-                    if j == 0:
-                        pb = N19  # già positivo nel primo anno
+            st.metric("Expected NPV", f"{expected_npv:,.2f}")
+            st.metric("VaR 95% (CaR)", f"{percentile_5:,.2f}")
+            st.metric("Probabilità NPV<0", f"{downside_prob*100:.2f}%")
+
+            # ------------------------- Payback period -------------------------
+            payback_array = []
+            N4_array = np.arange(fcf_matrix.shape[1]) + 1/6
+
+            for i in range(fcf_matrix.shape[0]):
+                npv_cum = np.cumsum(fcf_pv_matrix[i,:])
+                pb = np.nan
+                for j in range(len(npv_cum)):
+                    M19 = npv_cum[j-1] if j > 0 else 0
+                    N19 = npv_cum[j]
+                    N4 = N4_array[j]
+                    if N19 >= 0:
+                        if j == 0:
+                            pb = N19
+                        else:
+                            pb = -M19 / (N19 - M19) + N4 - 1
+                        break
+                payback_array.append(pb)
+            payback_array = np.array(payback_array)
+
+            # ------------------------- IRR per anno -------------------------
+            n_years = fcf_matrix.shape[1]
+            irr_matrix = np.zeros((fcf_matrix.shape[0], n_years))
+            for i in range(fcf_matrix.shape[0]):
+                for j in range(n_years):
+                    fcf_subset = fcf_matrix[i, :j+1]
+                    if np.any(fcf_subset < 0) and np.any(fcf_subset > 0):
+                        irr_matrix[i, j] = npf.irr(fcf_subset)
                     else:
-                        pb = -M19 / (N19 - M19) + N4 - 1
-                    break  # payback trovato
+                        irr_matrix[i, j] = 0
 
-            payback_array.append(pb)
+            # ------------------------- PPI per anno -------------------------
+            profit_index_array = []
+            for i in range(fcf_matrix.shape[0]):
+                fcf = fcf_pv_matrix[i, :]
+                npv_cum = np.cumsum(fcf)
+                cost_total = np.abs(costs_fixed) + np.abs(capex)
+                cost_total = cost_total / ((1 + discount_rate) ** np.arange(1, n_years + 1))
+                cost_total_cum = np.cumsum(cost_total)
+                profit_index_array.append(npv_cum / cost_total_cum)
+            profit_index_array = np.array(profit_index_array)
 
-        payback_array = np.array(payback_array)
+            # ------------------------- Percentili -------------------------
+            ppi_min = np.nanmin(profit_index_array, axis=0)
+            ppi_p5 = np.nanpercentile(profit_index_array, 5, axis=0)
+            ppi_p50 = np.nanpercentile(profit_index_array, 50, axis=0)
+            ppi_p95 = np.nanpercentile(profit_index_array, 95, axis=0)
+            ppi_max = np.nanmax(profit_index_array, axis=0)
 
+            irr_min = np.nanmin(irr_matrix, axis=0)
+            irr_p5 = np.nanpercentile(irr_matrix, 5, axis=0)
+            irr_p50 = np.nanpercentile(irr_matrix, 50, axis=0)
+            irr_p95 = np.nanpercentile(irr_matrix, 95, axis=0)
+            irr_max = np.nanmax(irr_matrix, axis=0)
 
-        # ------------------------- IRR per anno -------------------------
-        n_years = fcf_matrix.shape[1]
-        irr_matrix = np.zeros((fcf_matrix.shape[0], n_years))
+            # ------------------------- Grafici -------------------------
+            st.pyplot(plot_npv_distribution(npv_array, expected_npv, percentile_5, project_name))
+            st.pyplot(plot_boxplot(npv_array, project_name))
+            st.pyplot(plot_cashflows(fcf_matrix, fcf_matrix.shape[1], project_name))
+            st.pyplot(plot_cumulative_npv(npv_cum_matrix, project_name))
+            st.pyplot(plot_payback_distribution(payback_array, project_name))
+            st.pyplot(plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
+            st.pyplot(plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=df['Anno'].to_list(), title="Andamento PPI per anno", figsize=(10,6)))
 
-        for i in range(fcf_matrix.shape[0]):
-            for j in range(n_years):
-                fcf_subset = fcf_matrix[i, :j+1]  # flussi fino all'anno j
-                # IRR calcolabile solo se ci sono flussi negativi e positivi
-                if np.any(fcf_subset < 0) and np.any(fcf_subset > 0):
-                    irr_matrix[i, j] = npf.irr(fcf_subset)
-                else:
-                    irr_matrix[i, j] = 0
+            # ------------------------- KRI Gauges -------------------------
+            st.plotly_chart(plot_car_kri(percentile_5, expected_npv, project_name))
+            st.plotly_chart(plot_probs_kri(downside_prob, project_name))
 
-        # ------------------------- PROFITABILITY INDEX per anno -------------------------
-        years = fcf_matrix.shape[1] 
-        profit_index_array = []
+            # ------------------------- Export Excel -------------------------
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                pd.DataFrame({'Simulazione': np.arange(1,len(npv_array)+1), 'NPV': npv_array}).to_excel(writer, index=False, sheet_name='NPV')
+                df_fcf = pd.DataFrame(fcf_matrix, columns=years_col)
+                df_fcf.insert(0, 'Simulazione', np.arange(1, fcf_matrix.shape[0]+1))
+                df_fcf.to_excel(writer, index=False, sheet_name='FCF_simulati')
+                df_dcf = pd.DataFrame(fcf_pv_matrix, columns=years_col)
+                df_dcf.insert(0, 'Simulazione', np.arange(1, fcf_pv_matrix.shape[0]+1))
+                df_dcf.to_excel(writer, index=False, sheet_name='DCF_simulati')
+                median_fcf = np.median(fcf_matrix, axis=0)
+                p5_fcf = np.percentile(fcf_matrix,5,axis=0)
+                p95_fcf = np.percentile(fcf_matrix,95,axis=0)
+                pd.DataFrame({'Anno': years_col, 'Median': median_fcf, 'P5': p5_fcf, 'P95': p95_fcf}).to_excel(writer, index=False, sheet_name='FCF_percentili')
+                median_dcf = np.median(fcf_pv_matrix, axis=0)
+                p5_dcf = np.percentile(fcf_pv_matrix,5,axis=0)
+                p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
+                pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
+                pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
+                pd.DataFrame({'Anno': years_col, 'IRR_min': irr_min,'IRR_p5': irr_p5,'IRR_p50': irr_p50,'IRR_p95': irr_p95,'IRR_max': irr_max}).to_excel(writer, index=False, sheet_name='IRR_percentili')
+                pd.DataFrame({'Anno': years_col, 'PPI_min': ppi_min,'PPI_p5': ppi_p5,'PPI_p50': ppi_p50,'PPI_p95': ppi_p95,'PPI_max': ppi_max}).to_excel(writer, index=False, sheet_name='PPI_percentili')
 
-        for i in range(fcf_matrix.shape[0]):
-            fcf = fcf_pv_matrix[i, :]
-            npv_cum = np.cumsum(fcf)
-            cost_total = np.abs(costs_fixed) + np.abs(capex)
-            cost_total = cost_total / ((1 + discount_rate) ** np.arange(1, years + 1))
-            cost_total_cum = np.cumsum(cost_total)
-
-            profit_index_array.append(npv_cum / cost_total_cum)
-
-        profit_index_array = np.array(profit_index_array)
-
-
-        # Percentili PPI per anno
-        ppi_min = np.nanmin(profit_index_array, axis=0)
-        ppi_p5 = np.nanpercentile(profit_index_array, 5, axis=0)
-        ppi_p50 = np.nanpercentile(profit_index_array, 50, axis=0)
-        ppi_p95 = np.nanpercentile(profit_index_array, 95, axis=0)
-        ppi_max = np.nanmax(profit_index_array, axis=0)
-
-
-        # Percentili IRR per anno
-        irr_min = np.nanmin(irr_matrix, axis=0)
-        irr_p5 = np.nanpercentile(irr_matrix, 5, axis=0)
-        irr_p50 = np.nanpercentile(irr_matrix, 50, axis=0)
-        irr_p95 = np.nanpercentile(irr_matrix, 95, axis=0)
-        irr_max = np.nanmax(irr_matrix, axis=0)
-
-        # Metriche principali
-        expected_npv = np.mean(npv_array)
-        percentile_5 = np.percentile(npv_array,5)
-        downside_prob = np.mean(npv_array<0)
-
-        st.metric("Expected NPV", f"{expected_npv:,.2f}")
-        st.metric("VaR 95% (CaR)", f"{percentile_5:,.2f}")
-        st.metric("Probabilità NPV<0", f"{downside_prob*100:.2f}%")
-
-
-        # Grafici
-        st.pyplot(plot_npv_distribution(npv_array, expected_npv, percentile_5, project_name))
-        st.pyplot(plot_boxplot(npv_array, project_name))
-        st.pyplot(plot_cashflows(fcf_matrix, fcf_matrix.shape[1], project_name))
-        st.pyplot(plot_cumulative_npv(npv_cum_matrix, project_name))
-        st.pyplot(plot_payback_distribution(payback_array, project_name))
-        st.pyplot(plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
-        st.pyplot(plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=df['Anno'].to_list(), title="Andamento PPI per anno", figsize=(10,6)))
-
-
-        # ------------------------- KRI Gauges -------------------------
-        st.plotly_chart(plot_car_kri(percentile_5, expected_npv, project_name))
-        fig_prob = plot_probs_kri(downside_prob, project_name)
-        st.plotly_chart(fig_prob)
-
-        # Export Excel multi-sheet
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            # NPV simulati
-            pd.DataFrame({'Simulazione': np.arange(1,len(npv_array)+1), 'NPV': npv_array}).to_excel(writer, index=False, sheet_name='NPV')
-
-            # FCF simulati
-            df_fcf = pd.DataFrame(fcf_matrix, columns=years_col)
-            df_fcf.insert(0, 'Simulazione', np.arange(1, fcf_matrix.shape[0]+1))
-            df_fcf.to_excel(writer, index=False, sheet_name='FCF_simulati')
-
-            # DCF simulati (FCF scontati)
-            df_dcf = pd.DataFrame(fcf_pv_matrix, columns=years_col)
-            df_dcf.insert(0, 'Simulazione', np.arange(1, fcf_pv_matrix.shape[0]+1))
-            df_dcf.to_excel(writer, index=False, sheet_name='DCF_simulati')
-
-            # Percentili FCF
-            median_fcf = np.median(fcf_matrix, axis=0)
-            p5_fcf = np.percentile(fcf_matrix,5,axis=0)
-            p95_fcf = np.percentile(fcf_matrix,95,axis=0)
-            pd.DataFrame({'Anno': years_col, 'Median': median_fcf, 'P5': p5_fcf, 'P95': p95_fcf}).to_excel(writer, index=False, sheet_name='FCF_percentili')
-
-            # Percentili DCF
-            median_dcf = np.median(fcf_pv_matrix, axis=0)
-            p5_dcf = np.percentile(fcf_pv_matrix,5,axis=0)
-            p95_dcf = np.percentile(fcf_pv_matrix,95,axis=0)
-            pd.DataFrame({'Anno': years_col, 'Median': median_dcf, 'P5': p5_dcf, 'P95': p95_dcf}).to_excel(writer, index=False, sheet_name='DCF_percentili')
-
-            # Payback period
-            pd.DataFrame({'Simulazione': np.arange(1,len(payback_array)+1), 'PaybackYear': payback_array}).to_excel(writer, index=False, sheet_name='Payback_period')
-
-            # Percentili IRR
-            pd.DataFrame({
-            'Anno': years_col,
-            'IRR_min': irr_min,
-            'IRR_p5': irr_p5,
-            'IRR_p50': irr_p50,
-            'IRR_p95': irr_p95,
-            'IRR_max': irr_max,
-            }).to_excel(writer, index=False, sheet_name='IRR_percentili')
-
-            # Percentili IRR
-            pd.DataFrame({
-            'Anno': years_col,
-            'PPI_min': ppi_min,
-            'PPI_p5': ppi_p5,
-            'PPI_p50': ppi_p50,
-            'PPI_p95': ppi_p95,
-            'PPI_max': ppi_max,
-            }).to_excel(writer, index=False, sheet_name='PPI_percentili')
-
-        st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
+            st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
