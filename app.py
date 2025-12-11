@@ -267,6 +267,7 @@ if st.session_state.logged_in:
                 fcf_subset = fcf_matrix[i, :j+1]
                 if np.any(fcf_subset < 0) and np.any(fcf_subset > 0):
                     irr_matrix[i, j] = npf.irr(fcf_subset)
+                    irr_matrix[i, j] = np.clip(irr_matrix[i, j], -1, 5)
                 else:
                     irr_matrix[i, j] = 0
 
@@ -333,6 +334,7 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
