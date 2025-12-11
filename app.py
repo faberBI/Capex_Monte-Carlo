@@ -183,6 +183,58 @@ if st.session_state.logged_in:
         npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
             df, n_sim, discount_rate, tax_rate, shift_probs
         )
+        n_sim_mean = min(500, n_sim)  # numero di simulazioni da considerare per la media
+    
+        # Matrici per accumulare i flussi shiftati
+        revenue_matrix = np.zeros((n_sim_mean, len(years_col)))
+        cs_matrix = np.zeros((n_sim_mean, len(years_col)))
+        capex_matrix = np.zeros((n_sim_mean, len(years_col)))
+    
+        def apply_shift(flow, probs):
+            shifted = np.zeros_like(flow)
+            for y in range(len(flow)):
+                n_shift = np.random.choice([0,1,2], p=probs)
+                target = min(y + n_shift, len(flow)-1)
+                shifted[target] += flow[y]
+            return shifted
+    
+        for i in range(n_sim_mean):
+            revenue_orig = np.array([np.random.triangular(*sorted([rev_min[y], rev_mode[y], rev_max[y]])) for y in range(len(years_col))])
+            cs_orig = np.array([np.random.triangular(*sorted([cs_min[y], cs_mode[y], cs_max[y]])) for y in range(len(years_col))])
+            capex_orig = np.array(capex)
+    
+            revenue_shifted = apply_shift(revenue_orig, shift_probs)
+            cs_shifted = apply_shift(cs_orig, shift_probs)
+            capex_shifted = apply_shift(capex_orig, shift_probs)
+    
+            revenue_matrix[i,:] = revenue_shifted
+            cs_matrix[i,:] = cs_shifted
+            capex_matrix[i,:] = capex_shifted
+    
+        # Media
+        revenue_mean = np.mean(revenue_matrix, axis=0)
+        cs_mean = np.mean(cs_matrix, axis=0)
+        capex_mean = np.mean(capex_matrix, axis=0)
+    
+        # Flussi originali medi
+        revenue_orig_mean = np.array([np.mean([np.random.triangular(*sorted([rev_min[y], rev_mode[y], rev_max[y]])) for _ in range(n_sim_mean)]) for y in range(len(years_col))])
+        cs_orig_mean = np.array([np.mean([np.random.triangular(*sorted([cs_min[y], cs_mode[y], cs_max[y]])) for _ in range(n_sim_mean)]) for y in range(len(years_col))])
+        capex_orig_mean = np.array([np.mean([capex[y] for _ in range(n_sim_mean)]) for y in range(len(years_col))])
+    
+        # Grafico comparativo
+        plt.figure(figsize=(12,6))
+        plt.plot(years_col, revenue_orig_mean, marker='o', label="Ricavi originali (media)")
+        plt.plot(years_col, revenue_mean, marker='x', label="Ricavi shiftati (media)")
+        plt.plot(years_col, cs_orig_mean, marker='o', label="Costi variabili originali (media)")
+        plt.plot(years_col, cs_mean, marker='x', label="Costi variabili shiftati (media)")
+        plt.plot(years_col, capex_orig_mean, marker='o', label="Capex originali (media)")
+        plt.plot(years_col, capex_mean, marker='x', label="Capex shiftati (media)")
+        plt.xlabel("Anno")
+        plt.ylabel("Valore flusso")
+        plt.title("Confronto flussi originali vs shiftati (media su simulazioni)")
+        plt.legend()
+        plt.grid(True)
+        st.pyplot(plt)
 
         # ------------------------- METRICHE PRINCIPALI -------------------------
         expected_npv = np.mean(npv_array)
@@ -286,5 +338,6 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
