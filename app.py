@@ -43,6 +43,24 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
 
+    # Matrici per flussi originali e shiftati
+    revenue_matrix_orig = np.zeros((n_sim, years))
+    cs_matrix_orig = np.zeros((n_sim, years))
+    capex_matrix_orig = np.zeros((n_sim, years))
+
+    revenue_matrix_shifted = np.zeros((n_sim, years))
+    cs_matrix_shifted = np.zeros((n_sim, years))
+    capex_matrix_shifted = np.zeros((n_sim, years))
+
+    # Funzione shift
+    def apply_shift(flow, probs):
+        shifted = np.zeros_like(flow)
+        for y in range(len(flow)):
+            n_shift = np.random.choice([0,1,2], p=probs)
+            target = min(y + n_shift, len(flow)-1)
+            shifted[target] += flow[y]
+        return shifted
+
     for i in range(n_sim):
         # Flussi per simulazione
         revenue_flows = np.zeros(years)
@@ -55,7 +73,6 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
             if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
                 revenue = 0
             else:
-                # Assicuriamoci left <= mode <= right
                 l, m, r = sorted([rev_min[y], rev_mode[y], rev_max[y]])
                 revenue = np.random.triangular(l, m, r)
             revenue_flows[y] = revenue
@@ -76,24 +93,26 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
                 disp = np.random.triangular(l, m, r)
             disposal_flows[y] = disp
 
-        # ------------------ APPLICA SHIFT MULTISTEP ------------------
-        def apply_shift(flow, probs):
-            shifted = np.zeros_like(flow)
-            for y in range(len(flow)):
-                n_shift = np.random.choice([0,1,2], p=probs)
-                target = min(y + n_shift, len(flow)-1)
-                shifted[target] += flow[y]
-            return shifted
+        # Salva flussi originali
+        revenue_matrix_orig[i,:] = revenue_flows
+        cs_matrix_orig[i,:] = cs_flows
+        capex_matrix_orig[i,:] = capex_flows
 
-        revenue_flows = apply_shift(revenue_flows, shift_probs)
-        cs_flows = apply_shift(cs_flows, shift_probs)
-        capex_flows = apply_shift(capex_flows, shift_probs)
+        # Applica shift
+        revenue_flows_shifted = apply_shift(revenue_flows, shift_probs)
+        cs_flows_shifted = apply_shift(cs_flows, shift_probs)
+        capex_flows_shifted = apply_shift(capex_flows, shift_probs)
 
-        # FCF
-        ebitda = revenue_flows + cs_flows + costs_fixed
+        # Salva flussi shiftati
+        revenue_matrix_shifted[i,:] = revenue_flows_shifted
+        cs_matrix_shifted[i,:] = cs_flows_shifted
+        capex_matrix_shifted[i,:] = capex_flows_shifted
+
+        # FCF usando i flussi shiftati
+        ebitda = revenue_flows_shifted + cs_flows_shifted + costs_fixed
         ebit = ebitda + amort
         taxes = -ebit * tax_rate
-        fcf = ebitda + taxes + capex_flows + disposal_flows + change_wc
+        fcf = ebitda + taxes + capex_flows_shifted + disposal_flows + change_wc
 
         # DCF
         fcf_pv = fcf / ((1 + discount_rate) ** (np.arange(1, years+1)))
@@ -103,9 +122,13 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
         npv_list.append(np.sum(fcf_pv))
         npv_cum_matrix[i,:] = np.cumsum(fcf_pv)
 
-    return (np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex, revenue_matrix_orig, cs_matrix_orig, capex_matrix_orig, revenue_matrix_shifted, cs_matrix_shifted, capex_matrix_shifted)
-
-
+    return (
+        np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix,
+        years_col, costs_fixed, capex,
+        revenue_matrix_orig, cs_matrix_orig, capex_matrix_orig,
+        revenue_matrix_shifted, cs_matrix_shifted, capex_matrix_shifted
+    )
+    
 # -----------------------------
 # CONFIGURAZIONE STREAMLIT
 # -----------------------------
@@ -310,6 +333,7 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
