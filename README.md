@@ -1,6 +1,6 @@
 # 📊 CAPEX Risk Framework 
 
-Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento di progetti di investimento **CAPEX** tramite **simulazioni Monte Carlo**, considerando distribuzioni stastistiche per ricavi, costi variabili e costi fissi.
+Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento di progetti di investimento **CAPEX** tramite **simulazioni Monte Carlo**, considerando distribuzioni stastistiche per ricavi, costi variabili e costi fissi. E shift temporali su costi, capex e ricavi.
 
 ---
 
@@ -36,6 +36,7 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 ### 🎲 Simulazione Monte Carlo
 
 * Numero simulazioni configurabile.
+* Probs di shift dei ricavi, costi e capex
 * Indicatori di rischio:
 
   * **NPV** (Net Present Value).
@@ -49,8 +50,12 @@ Un'interfaccia interattiva in **Streamlit** per analizzare rischio e rendimento 
 ### 📊 Visualizzazioni
 
 * Distribuzione NPV (**istogramma**).
+* **Shif plot avg by time**
 * **Boxplot** NPV.
 * **Cash flow annuo medio** (bar chart).
+* **IRR plot**
+* **Payback to period plot**
+* **Profitability Index plot**
 * **Matrice rischio-rendimento** per confronto progetti.
 
 ### 🤖 Open AI
