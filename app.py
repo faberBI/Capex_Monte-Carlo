@@ -61,10 +61,25 @@ def run_simulations(
     def prep_shift(shift_dict):
         return list(shift_dict.keys()), list(shift_dict.values())
 
-    rev_shift_vals, rev_shift_probs_list = prep_shift(shift_rev_probs)
-    cs_shift_vals, cs_shift_probs_list = prep_shift(shift_cs_probs)
-    capex_shift_vals, capex_shift_probs_list = prep_shift(shift_capex_probs)
-    disp_shift_vals, disp_shift_probs_list = prep_shift(shift_disposal_probs)
+    # ---- SHIFT COSTI VARIABILI ----
+    st.sidebar.subheader("Shift Costi Variabili")
+    cs_shift_values = st.sidebar.text_input("Valori shift costi variabili", value="0,1")
+    cs_shift_probs = st.sidebar.text_input("Probabilità shift costi variabili", value="0.7,0.3")
+
+    # ---- SHIFT CAPEX ----
+    st.sidebar.subheader("Shift CAPEX")
+    capex_shift_values = st.sidebar.text_input("Valori shift CAPEX", value="0,-1")
+    capex_shift_probs = st.sidebar.text_input("Probabilità shift CAPEX", value="0.9,0.1")
+
+    # ---- SHIFT RICAVI ----
+    st.sidebar.subheader("Shift Ricavi")
+    rev_shift_values = st.sidebar.text_input("Valori shift ricavi", value="0")
+    rev_shift_probs = st.sidebar.text_input("Probabilità shift ricavi", value="1.0")
+
+    # ---- SHIFT DISPOSAL ----
+    st.sidebar.subheader("Shift Disposal")
+    disp_shift_values = st.sidebar.text_input("Valori shift disposal", value="0")
+    disp_shift_probs = st.sidebar.text_input("Probabilità shift disposal", value="1.0")
 
     # Helper per indici shiftati
     def safe_idx(idx):
@@ -425,6 +440,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
