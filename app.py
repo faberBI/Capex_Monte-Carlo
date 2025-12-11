@@ -53,14 +53,21 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     capex_matrix_shifted = np.zeros((n_sim, years))
 
     # Funzione shift
-    def apply_shift(flow, probs):
+    def apply_shift(flow, probs, pct_shift):
         shifted = np.zeros_like(flow)
         for y in range(len(flow)):
+            # Determina quanto del flusso viene effettivamente shiftato
+            to_shift = flow[y] * (pct_shift / 100)
+            remain = flow[y] - to_shift
+        
             n_shift = np.random.choice([0,1,2], p=probs)
             target = min(y + n_shift, len(flow)-1)
-            shifted[target] += flow[y]
+            shifted[target] += to_shift
+        
+            # Mantieni il resto nell'anno originale
+            shifted[y] += remain
         return shifted
-
+        
     for i in range(n_sim):
         # Flussi per simulazione
         revenue_flows = np.zeros(years)
@@ -99,9 +106,9 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
         capex_matrix_orig[i,:] = capex_flows
 
         # Applica shift
-        revenue_flows_shifted = apply_shift(revenue_flows, shift_probs)
-        cs_flows_shifted = apply_shift(cs_flows, shift_probs)
-        capex_flows_shifted = apply_shift(capex_flows, shift_probs)
+        revenue_flows_shifted = apply_shift(revenue_flows, shift_probs, shift_rev_pct)
+        cs_flows_shifted = apply_shift(cs_flows, shift_probs, shift_cs_pct)
+        capex_flows_shifted = apply_shift(capex_flows, shift_probs, shift_capex_pct)
 
         # Salva flussi shiftati
         revenue_matrix_shifted[i,:] = revenue_flows_shifted
@@ -193,6 +200,12 @@ if st.session_state.logged_in:
         shift_2 = st.slider("Probabilità shift 2 anni", 0.0, 1.0, 0.2)
         shift_probs = np.array([shift_0, shift_1, shift_2])
         shift_probs = shift_probs / shift_probs.sum()  # Normalizza
+        
+        st.markdown("### Percentuale (%) flussi da shiftare")
+        shift_rev_pct = st.slider("Ricavi (%)", 0, 100, 100)
+        shift_cs_pct = st.slider("Costi variabili (%)", 0, 100, 100)
+        shift_capex_pct = st.slider("Capex (%)", 0, 100, 100)
+
 
         run_button = st.button("Esegui simulazione")
 
@@ -334,6 +347,7 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
