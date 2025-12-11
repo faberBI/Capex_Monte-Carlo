@@ -10,12 +10,12 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
 # -----------------------------
-# INIZIALIZZAZIONE SESSION_STATE
+# INIZIALIZZAZIONE SICURA DELLO STATE
 # -----------------------------
 if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
-    st.session_state.username = ""
+    st.session_state['username'] = ""
 
 # -----------------------------
 # LOGIN FUNCTIONS
@@ -259,5 +259,6 @@ if st.session_state.get('logged_in', False):
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
