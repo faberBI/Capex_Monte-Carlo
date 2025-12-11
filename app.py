@@ -152,44 +152,11 @@ Simula scenari finanziari e analizza i progetti di investimento con DCF
 """, unsafe_allow_html=True)
 
 # -----------------------------
-# LOGIN SICURO
-# -----------------------------
-st.sidebar.title("🔐 Login")
-
-with open("users.json") as f:
-    users = json.load(f)
-
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def check_login(username, password):
-    return users.get(username) == hash_password(password)
-
-if not st.session_state.logged_in:
-    username_input = st.sidebar.text_input("Username")
-    password_input = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Login"):
-        if check_login(username_input, password_input):
-            st.session_state.logged_in = True
-            st.session_state.username = username_input
-            st.sidebar.success(f"Benvenuto {username_input}")
-        else:
-            st.sidebar.error("Username o password errati")
-else:
-    st.sidebar.success(f"Benvenuto {st.session_state.username}")
-
-# -----------------------------
 # CONTENUTO DELL'APP
 # -----------------------------
 if st.session_state.logged_in:
-    
-# ------------------------- Streamlit UI -------------------------
-    st.title("NPV @Risk Simulation Tool by ERM ")
+
+    st.title("NPV @Risk Simulation Tool by ERM")
     
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
 
@@ -197,24 +164,25 @@ if st.session_state.logged_in:
 
     # ---- SHIFT COSTI VARIABILI ----
     st.sidebar.subheader("Shift Costi Variabili")
-    cs_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0,1")
-    cs_shift_probs = st.sidebar.text_input("Probabilità shift (es: 0.7,0.3)", value="0.7,0.3")
+    cs_shift_values = st.sidebar.text_input("Valori shift costi variabili", value="0,1")
+    cs_shift_probs = st.sidebar.text_input("Probabilità shift costi variabili", value="0.7,0.3")
 
     # ---- SHIFT CAPEX ----
     st.sidebar.subheader("Shift CAPEX")
-    capex_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0,-1")
-    capex_shift_probs = st.sidebar.text_input("Probabilità shift (es: 0.9,0.1)", value="0.9,0.1")
+    capex_shift_values = st.sidebar.text_input("Valori shift CAPEX", value="0,-1")
+    capex_shift_probs = st.sidebar.text_input("Probabilità shift CAPEX", value="0.9,0.1")
 
     # ---- SHIFT RICAVI ----
     st.sidebar.subheader("Shift Ricavi")
-    rev_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0")
-    rev_shift_probs = st.sidebar.text_input("Probabilità shift (es: 1.0)", value="1.0")
+    rev_shift_values = st.sidebar.text_input("Valori shift ricavi", value="0")
+    rev_shift_probs = st.sidebar.text_input("Probabilità shift ricavi", value="1.0")
 
-     # ---- SHIFT DISPOSALS ----
-    disp_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0")
-    disp_shift_probs = st.sidebar.text_input("Probabilità shift (es: 1.0)", value="1.0")
-    
-    # Funzione per convertire valori e probabilità in dict
+    # ---- SHIFT DISPOSAL ----
+    st.sidebar.subheader("Shift Disposal")
+    disp_shift_values = st.sidebar.text_input("Valori shift disposal", value="0")
+    disp_shift_probs = st.sidebar.text_input("Probabilità shift disposal", value="1.0")
+
+    # Funzione helper per convertire valori e probabilità in dict
     def convert_shift_to_dict(values_str, probs_str):
         vals = [int(x.strip()) for x in values_str.split(",")]
         probs = [float(x.strip()) for x in probs_str.split(",")]
@@ -225,28 +193,32 @@ if st.session_state.logged_in:
             st.error("🚨 Le probabilità devono sommare a 1.0!")
             st.stop()
         return {vals[i]: probs[i] for i in range(len(vals))}
-    
+
     cs_shift_dict = convert_shift_to_dict(cs_shift_values, cs_shift_probs)
     capex_shift_dict = convert_shift_to_dict(capex_shift_values, capex_shift_probs)
     rev_shift_dict = convert_shift_to_dict(rev_shift_values, rev_shift_probs)
     disp_shift_dict = convert_shift_to_dict(disp_shift_values, disp_shift_probs)
-    
-    with st.sidebar:
-        project_name = st.text_input("Nome progetto", value="Progetto 1")
-        discount_rate = st.number_input("Tasso di sconto (es. 0.10)", value=0.10, step=0.01, format="%.4f")
-        tax_rate = st.number_input("Aliquota fiscale (es. 0.25)", value=0.25, step=0.01, format="%.4f")
-        n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
-        seed = st.number_input("Seed (0=random)", value=0)
-        run_button = st.button("Esegui simulazione")
-    
+
+    # Parametri progetto
+    st.sidebar.markdown("### ⚙️ Parametri progetto")
+    project_name = st.sidebar.text_input("Nome progetto", value="Progetto 1")
+    discount_rate = st.sidebar.number_input("Tasso di sconto", value=0.10, step=0.01, format="%.4f")
+    tax_rate = st.sidebar.number_input("Aliquota fiscale", value=0.25, step=0.01, format="%.4f")
+    n_sim = st.sidebar.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
+    seed = st.sidebar.number_input("Seed (0=random)", value=0)
+    run_button = st.sidebar.button("Esegui simulazione")
+
     if uploaded_file is not None:
         df = pd.read_excel(uploaded_file)
         st.dataframe(df)
-    
+
     if run_button and uploaded_file is not None:
-        if seed !=0:
+        # Imposta seed
+        if seed != 0:
             np.random.seed(int(seed))
-            npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
+
+        # Chiama la funzione di simulazione passando tutti i shift
+        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
             df=df,
             n_sim=int(n_sim),
             discount_rate=float(discount_rate),
@@ -254,8 +226,8 @@ if st.session_state.logged_in:
             shift_cs_probs=cs_shift_dict,
             shift_capex_probs=capex_shift_dict,
             shift_rev_probs=rev_shift_dict,
-            shift_disposal_probs= disp_shift_dict
-            )
+            shift_disposal_probs=disp_shift_dict
+        )
 
     
         payback_array = []
@@ -405,6 +377,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
