@@ -18,81 +18,129 @@ from PIL import Image
 import streamlit as st
 
 
-def run_simulations(df, n_sim, discount_rate, tax_rate):
-    # Numero di anni e colonna anni
+def run_simulations(
+    df,
+    n_sim,
+    discount_rate,
+    tax_rate,
+    shift_rev_probs={0: 1.0},
+    shift_cs_probs={0: 1.0},
+    shift_capex_probs={0: 1.0},
+    shift_disposal_probs={0: 1.0}
+):
+
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
-    # Estrazione colonne con fallback a 0 se mancanti
+    # ----- LETTURA COLONNE -----
     rev_min = df.get('Revenues min', pd.Series([0]*years)).values
     rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
     rev_max = df.get('Revenues max', pd.Series([0]*years)).values
+
     cs_min = df.get('Cost var min', pd.Series([0]*years)).values
     cs_mode = df.get('Cost var piano', pd.Series([0]*years)).values
     cs_max = df.get('Cost var max', pd.Series([0]*years)).values
+
     costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
     amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).values
     capex = df.get('Capex', pd.Series([0]*years)).values
-    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+
     disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).values
+    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
     disposal_max = df.get('Disposal & Capex Saving max', pd.Series([0]*years)).values
+
     change_wc = df.get('Change in working cap,', pd.Series([0]*years)).values
 
-    # Matrici risultati
+    # ----- PREPARA RISULTATI -----
     fcf_matrix = np.zeros((n_sim, years))
     fcf_pv_matrix = np.zeros((n_sim, years))
     npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
 
-    # Simulazioni Monte Carlo
-    for y in range(years):
-        for i in range(n_sim):
-            # Ricavi
-            if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
+    # ----- PREPARA SHIFT -----
+    def prep_shift(shift_dict):
+        return list(shift_dict.keys()), list(shift_dict.values())
+
+    rev_shift_vals, rev_shift_probs_list = prep_shift(shift_rev_probs)
+    cs_shift_vals, cs_shift_probs_list = prep_shift(shift_cs_probs)
+    capex_shift_vals, capex_shift_probs_list = prep_shift(shift_capex_probs)
+    disp_shift_vals, disp_shift_probs_list = prep_shift(shift_disposal_probs)
+
+    # Helper per indici shiftati
+    def safe_idx(idx):
+        return np.clip(idx, 0, years - 1)
+
+    # ----- SIMULAZIONI -----
+    for i in range(n_sim):
+        for y in range(years):
+
+            # -------- SHIFT TEMPORALI --------
+            rev_shift = np.random.choice(rev_shift_vals, p=rev_shift_probs_list)
+            cs_shift = np.random.choice(cs_shift_vals, p=cs_shift_probs_list)
+            capex_shift = np.random.choice(capex_shift_vals, p=capex_shift_probs_list)
+            disp_shift = np.random.choice(disp_shift_vals, p=disp_shift_probs_list)
+
+            idx_rev = safe_idx(y - rev_shift)
+            idx_cs = safe_idx(y - cs_shift)
+            idx_capex = safe_idx(y - capex_shift)
+            idx_disp = safe_idx(y - disp_shift)
+
+            # -------- REVENUES --------
+            if rev_min[idx_rev] == rev_mode[idx_rev] == rev_max[idx_rev] == 0:
                 revenue = 0
             else:
-                revenue = np.random.triangular(rev_min[y], rev_mode[y], rev_max[y])
+                revenue = np.random.triangular(
+                    rev_min[idx_rev], rev_mode[idx_rev], rev_max[idx_rev]
+                )
 
-            # Costi variabili
-            if cs_min[y] == cs_mode[y] == cs_max[y] == 0:
+            # -------- COSTI VARIABILI --------
+            if cs_min[idx_cs] == cs_mode[idx_cs] == cs_max[idx_cs] == 0:
                 cs = 0
             else:
-                cs = np.random.triangular(cs_min[y], cs_mode[y], cs_max[y])
-            
-            # Disposal    
-            if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0:
+                cs = np.random.triangular(
+                    cs_min[idx_cs], cs_mode[idx_cs], cs_max[idx_cs]
+                )
+
+            # -------- CAPEX (SHIFTATO) --------
+            capex_y = capex[idx_capex]
+
+            # -------- DISPOSAL (SHIFTATO) --------
+            if disposal_min[idx_disp] == disposal_mode[idx_disp] == disposal_max[idx_disp] == 0:
                 disposal = 0
             else:
-                disposal = np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y])
+                disposal = np.random.triangular(
+                    disposal_min[idx_disp],
+                    disposal_mode[idx_disp],
+                    disposal_max[idx_disp]
+                )
 
-            # EBITDA (tutti i costi nel df sono negativi)
-            ebitda = revenue + cs + costs_fixed[y]
+            # -------- COSTI FISSI E AMMORTAMENTI --------
+            cf = costs_fixed[y]
+            amort_y = amort[y]
 
-            # EBIT
-            ebit = ebitda + amort[y]
-
-            # Tasse (negative se costo, positive se beneficio)
+            # -------- EBIT E TASSE --------
+            ebitda = revenue + cs + cf
+            ebit = ebitda + amort_y
             taxes = -ebit * tax_rate
 
-            # FCF (tutti i costi già negativi)
-            fcf = ebitda + taxes + capex[y] + disposal + change_wc[y]
+            # -------- FREE CASH FLOW --------
+            fcf = ebitda + taxes + capex_y + disposal + change_wc[y]
 
-            # Sconto DCF
-            discount = (1 + discount_rate) ** (y + 1)
-            fcf_pv = fcf / discount
+            # -------- PRESENT VALUE --------
+            fcf_pv = fcf / ((1 + discount_rate) ** (y + 1))
 
-            # Salva risultati
             fcf_matrix[i, y] = fcf
             fcf_pv_matrix[i, y] = fcf_pv
 
-    # Calcolo NPV e cumulati
+    # ----- CALCOLO NPV -----
     for i in range(n_sim):
         npv = np.sum(fcf_pv_matrix[i, :])
         npv_cum = np.cumsum(fcf_pv_matrix[i, :])
         npv_list.append(npv)
         npv_cum_matrix[i, :] = npv_cum
 
-    return (np.array(npv_list),
+    return (
+        np.array(npv_list),
         fcf_matrix,
         fcf_pv_matrix,
         npv_cum_matrix,
@@ -100,6 +148,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate):
         costs_fixed,
         capex
     )
+
 
 
 # Carica il logo
@@ -163,6 +212,44 @@ if st.session_state.logged_in:
     st.title("NPV @Risk Simulation Tool by ERM ")
     
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
+
+    st.sidebar.markdown("### ⏳ Shift temporali (Monte Carlo)")
+
+    # ---- SHIFT COSTI VARIABILI ----
+    st.sidebar.subheader("Shift Costi Variabili")
+    cs_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0,1")
+    cs_shift_probs = st.sidebar.text_input("Probabilità shift (es: 0.7,0.3)", value="0.7,0.3")
+
+    # ---- SHIFT CAPEX ----
+    st.sidebar.subheader("Shift CAPEX")
+    capex_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0,-1")
+    capex_shift_probs = st.sidebar.text_input("Probabilità shift (es: 0.9,0.1)", value="0.9,0.1")
+
+    # ---- SHIFT RICAVI ----
+    st.sidebar.subheader("Shift Ricavi")
+    rev_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0")
+    rev_shift_probs = st.sidebar.text_input("Probabilità shift (es: 1.0)", value="1.0")
+
+     # ---- SHIFT DISPOSALS ----
+    disp_shift_values = st.sidebar.text_input("Valori shift (es: -1,0,1)", value="0")
+    disp_shift_probs = st.sidebar.text_input("Probabilità shift (es: 1.0)", value="1.0")
+    
+    # Funzione per convertire valori e probabilità in dict
+    def convert_shift_to_dict(values_str, probs_str):
+        vals = [int(x.strip()) for x in values_str.split(",")]
+        probs = [float(x.strip()) for x in probs_str.split(",")]
+        if len(vals) != len(probs):
+            st.error("🚨 Errore: numero di valori e probabilità non coincide!")
+            st.stop()
+        if abs(sum(probs) - 1.0) > 0.0001:
+            st.error("🚨 Le probabilità devono sommare a 1.0!")
+            st.stop()
+        return {vals[i]: probs[i] for i in range(len(vals))}
+    
+    cs_shift_dict = convert_shift_to_dict(cs_shift_values, cs_shift_probs)
+    capex_shift_dict = convert_shift_to_dict(capex_shift_values, capex_shift_probs)
+    rev_shift_dict = convert_shift_to_dict(rev_shift_values, rev_shift_probs)
+    disp_shift_dict = convert_shift_to_dict(disp_shift_values, disp_shift_probs)
     
     with st.sidebar:
         project_name = st.text_input("Nome progetto", value="Progetto 1")
@@ -179,7 +266,17 @@ if st.session_state.logged_in:
     if run_button and uploaded_file is not None:
         if seed !=0:
             np.random.seed(int(seed))
-        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(df, int(n_sim), float(discount_rate), float(tax_rate))
+            npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
+            df=df,
+            n_sim=int(n_sim),
+            discount_rate=float(discount_rate),
+            tax_rate=float(tax_rate),
+            shift_cs_probs=cs_shift_dict,
+            shift_capex_probs=capex_shift_dict,
+            shift_rev_probs=rev_shift_dict,
+            shift_disposal_probs= disp_shift_dict
+            )
+
     
         payback_array = []
         N4_array = np.arange(fcf_matrix.shape[1]) + 1/6  # frazione iniziale anno
@@ -328,6 +425,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
