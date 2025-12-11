@@ -213,7 +213,7 @@ def plot_irr_trends(irr_p5, irr_p50, irr_p95, years_labels=None,
     irr_p50 = np.array(irr_p50) * 100
     irr_p95 = np.array(irr_p95) * 100
     
-    n_years = len(irr_min)
+    n_years = len(irr_p5)
     
     if years_labels is None:
         years_labels = np.arange(1, n_years + 1)
@@ -278,6 +278,7 @@ def plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labe
     ax.grid(True, linestyle='--', alpha=0.5)
     
     return fig
+
 
 
 
