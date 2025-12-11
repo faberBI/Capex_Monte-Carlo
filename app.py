@@ -135,7 +135,7 @@ def run_simulations(df, n_sim, discount_rate, tax_rate,
 # -----------------------------
 # APP CONTENT
 # -----------------------------
-if st.session_state.logged_in:
+if st.session_state.get('logged_in', False):
 
     st.title("NPV @Risk Simulation Tool by ERM")
 
@@ -259,4 +259,5 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
