@@ -193,7 +193,7 @@ def plot_car_kri(car_value, expected_npv, project_name):
 
     return fig
 
-def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=None,
+def plot_irr_trends(irr_p5, irr_p50, irr_p95, years_labels=None,
                     title="Andamento IRR per anno", figsize=(10,6)):
     """
     Grafico andamento IRR per anno con percentili, IRR in %, anni personalizzati.
@@ -209,11 +209,9 @@ def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=Non
     """
     
     # Converti IRR in percentuale
-    irr_min = np.array(irr_min) * 100
     irr_p5 = np.array(irr_p5) * 100
     irr_p50 = np.array(irr_p50) * 100
     irr_p95 = np.array(irr_p95) * 100
-    irr_max = np.array(irr_max) * 100
     
     n_years = len(irr_min)
     
@@ -227,11 +225,7 @@ def plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=Non
     
     # Linea mediana
     ax.plot(years_labels, irr_p50, color='blue', linewidth=2, label='Mediana (50° percentile)')
-    
-    # Linee estreme (min e max)
-    ax.plot(years_labels, irr_min, '--', color='gray', linewidth=1, label='Min')
-    ax.plot(years_labels, irr_max, '--', color='gray', linewidth=1, label='Max')
-    
+        
     ax.set_xlabel("Anno")
     ax.set_ylabel("IRR (%)")
     ax.set_title(title)
@@ -284,6 +278,7 @@ def plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labe
     ax.grid(True, linestyle='--', alpha=0.5)
     
     return fig
+
 
 
 
