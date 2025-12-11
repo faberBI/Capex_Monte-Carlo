@@ -253,7 +253,7 @@ if st.session_state.logged_in:
         st.pyplot(plot_cashflows(fcf_matrix, fcf_matrix.shape[1], project_name))
         st.pyplot(plot_cumulative_npv(npv_cum_matrix, project_name))
         st.pyplot(plot_payback_distribution(payback_array, project_name))
-        st.pyplot(plot_irr_trends(irr_min, irr_p5, irr_p50, irr_p95, irr_max, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
+        st.pyplot(plot_irr_trends(irr_p5, irr_p50, irr_p95, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
         st.pyplot(plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=df['Anno'].to_list(), title="Andamento PPI per anno", figsize=(10,6)))
 
         # ------------------------- KRI -------------------------
@@ -286,4 +286,5 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
