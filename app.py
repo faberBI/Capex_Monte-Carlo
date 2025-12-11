@@ -10,18 +10,19 @@ import json
 from PIL import Image
 
 from capex.visuals import (
-    plot_npv_distribution, plot_boxplot, plot_cashflows, plot_cumulative_npv, 
-    plot_payback_distribution, plot_probs_kri, plot_car_kri, plot_irr_trends, plot_ppi_distribution
+    plot_npv_distribution, plot_boxplot, plot_cashflows,
+    plot_cumulative_npv, plot_payback_distribution, plot_probs_kri,
+    plot_car_kri, plot_irr_trends, plot_ppi_distribution
 )
 
 # -----------------------------
-# Funzione Monte Carlo con shift multistep
+# FUNZIONE SIMULAZIONE MONTE CARLO CON SHIFT MULTISTEP
 # -----------------------------
 def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
-    # Estrazione colonne
+    # Estrazione colonne con fallback
     rev_min = df.get('Revenues min', pd.Series([0]*years)).values
     rev_mode = df.get('Revenues piano', pd.Series([0]*years)).values
     rev_max = df.get('Revenues max', pd.Series([0]*years)).values
@@ -31,8 +32,9 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).values
     amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).values
     capex = df.get('Capex', pd.Series([0]*years)).values
-    disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).values
+    disposal = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
     disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).values
+    disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).values
     disposal_max = df.get('Disposal & Capex Saving max', pd.Series([0]*years)).values
     change_wc = df.get('Change in working cap,', pd.Series([0]*years)).values
 
@@ -43,62 +45,57 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     npv_list = []
 
     for i in range(n_sim):
-        # Genero flussi iniziali
-        revenue_arr = np.array([np.random.triangular(rev_min[y], rev_mode[y], rev_max[y]) for y in range(years)])
-        cs_arr = np.array([np.random.triangular(cs_min[y], cs_mode[y], cs_max[y]) for y in range(years)])
-        capex_arr = np.array([capex[y] for y in range(years)])
+        # Creazione flussi temporanei
+        revenue_flows = np.array([np.random.triangular(rev_min[y], rev_mode[y], rev_max[y]) for y in range(years)])
+        cs_flows = np.array([np.random.triangular(cs_min[y], cs_mode[y], cs_max[y]) for y in range(years)])
+        capex_flows = np.array(capex)
+        disposal_flows = np.array([np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y]) for y in range(years)])
+        fixed_flows = np.array(costs_fixed)
+        amort_flows = np.array(amort)
+        change_wc_flows = np.array(change_wc)
 
-        # Applico shift multistep
-        for y in range(years):
-            max_shift = years - y - 1
-            if max_shift > 0:
-                shift_probs_trimmed = shift_probs[:max_shift+1]
-                shift_probs_trimmed = shift_probs_trimmed / shift_probs_trimmed.sum()
+        # ------------------ APPLICA SHIFT MULTISTEP ------------------
+        def apply_shift(flow, probs):
+            shifted_flow = np.zeros_like(flow)
+            for y in range(len(flow)):
+                n_shift = np.random.choice([0,1,2], p=probs)
+                target_idx = min(y+n_shift, len(flow)-1)
+                shifted_flow[target_idx] += flow[y]
+            return shifted_flow
 
-                # Ricavi
-                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
-                if shift_year != 0:
-                    revenue_arr[y+shift_year] += revenue_arr[y]
-                    revenue_arr[y] = 0
-                # Costi variabili
-                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
-                if shift_year != 0:
-                    cs_arr[y+shift_year] += cs_arr[y]
-                    cs_arr[y] = 0
-                # Capex
-                shift_year = np.random.choice(range(max_shift+1), p=shift_probs_trimmed)
-                if shift_year != 0:
-                    capex_arr[y+shift_year] += capex_arr[y]
-                    capex_arr[y] = 0
+        revenue_flows = apply_shift(revenue_flows, shift_probs)
+        cs_flows = apply_shift(cs_flows, shift_probs)
+        capex_flows = apply_shift(capex_flows, shift_probs)
 
-        # Calcolo FCF e DCF
-        for y in range(years):
-            ebitda = revenue_arr[y] + cs_arr[y] + costs_fixed[y]
-            ebit = ebitda + amort[y]
-            taxes = -ebit * tax_rate
-            disposal = np.random.triangular(disposal_min[y], disposal_mode[y], disposal_max[y])
-            fcf = ebitda + taxes + capex_arr[y] + disposal + change_wc[y]
-            discount = (1 + discount_rate) ** (y + 1)
-            fcf_pv = fcf / discount
+        # ------------------ CALCOLA FCF ------------------
+        fcf = revenue_flows + cs_flows + fixed_flows + amort_flows
+        taxes = - (revenue_flows + cs_flows + fixed_flows + amort_flows) * tax_rate
+        fcf += taxes + capex_flows + disposal_flows + change_wc_flows
 
-            fcf_matrix[i, y] = fcf
-            fcf_pv_matrix[i, y] = fcf_pv
+        # DCF
+        fcf_pv = fcf / ((1 + discount_rate) ** (np.arange(1, years+1)))
 
-        npv = np.sum(fcf_pv_matrix[i, :])
-        npv_cum_matrix[i, :] = np.cumsum(fcf_pv_matrix[i, :])
-        npv_list.append(npv)
+        fcf_matrix[i,:] = fcf
+        fcf_pv_matrix[i,:] = fcf_pv
+        npv_list.append(np.sum(fcf_pv))
+        npv_cum_matrix[i,:] = np.cumsum(fcf_pv)
 
     return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
 
 # -----------------------------
-# Streamlit UI
+# CONFIGURAZIONE STREAMLIT
 # -----------------------------
 logo = Image.open("Image/logo_fibercop.PNG")
-st.set_page_config(page_title="NPV @Risk Tool", page_icon=logo , layout="wide")
+st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon=logo , layout="wide")
 st.image(logo, width=300)
-st.markdown("<h1 style='color:white'>NPV @Risk Simulation Tool</h1>", unsafe_allow_html=True)
+st.markdown("""
+<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>NPV @Risk Simulation Tool by ERM</h1>
+<p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>Simula scenari finanziari e analizza i progetti di investimento con DCF</p>
+""", unsafe_allow_html=True)
 
-# Login
+# -----------------------------
+# LOGIN
+# -----------------------------
 st.sidebar.title("🔐 Login")
 with open("users.json") as f:
     users = json.load(f)
@@ -128,33 +125,39 @@ else:
     st.sidebar.success(f"Benvenuto {st.session_state.username}")
 
 # -----------------------------
-# Parametri simulazione
+# PARAMETRI SIMULAZIONE + SHIFT
 # -----------------------------
 if st.session_state.logged_in:
+    st.title("NPV @Risk Simulation Tool by ERM")
+
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
-    if uploaded_file:
+
+    with st.sidebar:
+        st.header("Parametri simulazione")
+        project_name = st.text_input("Nome progetto", value="Progetto 1")
+        discount_rate = st.number_input("Tasso di sconto (es. 0.10)", value=0.10, step=0.01, format="%.4f")
+        tax_rate = st.number_input("Aliquota fiscale (es. 0.25)", value=0.25, step=0.01, format="%.4f")
+        n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
+        seed = st.number_input("Seed (0=random)", value=0)
+
+        st.markdown("### Shift probabilistici multistep")
+        shift_0 = st.slider("Probabilità rimanere stesso anno", 0.0, 1.0, 0.3)
+        shift_1 = st.slider("Probabilità shift 1 anno", 0.0, 1.0, 0.5)
+        shift_2 = st.slider("Probabilità shift 2 anni", 0.0, 1.0, 0.2)
+        shift_probs = np.array([shift_0, shift_1, shift_2])
+        shift_probs = shift_probs / shift_probs.sum()  # Normalizza
+
+        run_button = st.button("Esegui simulazione")
+
+    if uploaded_file is not None and run_button:
+        if seed != 0:
+            np.random.seed(int(seed))
         df = pd.read_excel(uploaded_file)
         st.dataframe(df)
 
-        project_name = st.text_input("Nome progetto", value="Progetto 1")
-        discount_rate = st.number_input("Tasso di sconto", value=0.1)
-        tax_rate = st.number_input("Aliquota fiscale", value=0.25)
-        n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=50000, value=2000)
-        seed = st.number_input("Seed (0=random)", value=0)
-
-        st.sidebar.markdown("### Shift probabilistici multistep")
-        shift_0 = st.sidebar.slider("Probabilità rimanere stesso anno", 0.0, 1.0, 0.3)
-        shift_1 = st.sidebar.slider("Probabilità shift 1 anno", 0.0, 1.0, 0.5)
-        shift_2 = st.sidebar.slider("Probabilità shift 2 anni", 0.0, 1.0, 0.2)
-        shift_probs = np.array([shift_0, shift_1, shift_2])
-        shift_probs = shift_probs / shift_probs.sum()  # Normalizzo
-
-        if st.button("Esegui simulazione"):
-            if seed != 0:
-                np.random.seed(int(seed))
-            npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
-                df, n_sim, discount_rate, tax_rate, shift_probs
-            )
+        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex = run_simulations(
+            df, n_sim, discount_rate, tax_rate, shift_probs
+        )
 
             # ------------------------- Calcolo metriche principali -------------------------
             expected_npv = np.mean(npv_array)
@@ -258,3 +261,4 @@ if st.session_state.logged_in:
             st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
