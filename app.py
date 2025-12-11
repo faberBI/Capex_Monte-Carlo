@@ -15,7 +15,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 from PIL import Image
-import streamlit as st
+
 
 
 def run_simulations(
@@ -61,29 +61,10 @@ def run_simulations(
     def prep_shift(shift_dict):
         return list(shift_dict.keys()), list(shift_dict.values())
 
-    # ---- SHIFT COSTI VARIABILI ----
-    st.sidebar.subheader("Shift Costi Variabili")
-    cs_shift_values = st.sidebar.text_input("Valori shift costi variabili", value="0,1")
-    cs_shift_probs = st.sidebar.text_input("Probabilità shift costi variabili", value="0.7,0.3")
-
-    # ---- SHIFT CAPEX ----
-    st.sidebar.subheader("Shift CAPEX")
-    capex_shift_values = st.sidebar.text_input("Valori shift CAPEX", value="0,-1")
-    capex_shift_probs = st.sidebar.text_input("Probabilità shift CAPEX", value="0.9,0.1")
-
-    # ---- SHIFT RICAVI ----
-    st.sidebar.subheader("Shift Ricavi")
-    rev_shift_values = st.sidebar.text_input("Valori shift ricavi", value="0")
-    rev_shift_probs = st.sidebar.text_input("Probabilità shift ricavi", value="1.0")
-
-    # ---- SHIFT DISPOSAL ----
-    st.sidebar.subheader("Shift Disposal")
-    disp_shift_values = st.sidebar.text_input("Valori shift disposal", value="0")
-    disp_shift_probs = st.sidebar.text_input("Probabilità shift disposal", value="1.0")
-
-    # Helper per indici shiftati
-    def safe_idx(idx):
-        return np.clip(idx, 0, years - 1)
+    rev_shift_vals, rev_shift_probs_list = prep_shift(shift_rev_probs)
+    cs_shift_vals, cs_shift_probs_list = prep_shift(shift_cs_probs)
+    capex_shift_vals, capex_shift_probs_list = prep_shift(shift_capex_probs)
+    disp_shift_vals, disp_shift_probs_list = prep_shift(shift_disposal_probs)
 
     # ----- SIMULAZIONI -----
     for i in range(n_sim):
@@ -95,26 +76,22 @@ def run_simulations(
             capex_shift = np.random.choice(capex_shift_vals, p=capex_shift_probs_list)
             disp_shift = np.random.choice(disp_shift_vals, p=disp_shift_probs_list)
 
-            idx_rev = safe_idx(y - rev_shift)
-            idx_cs = safe_idx(y - cs_shift)
-            idx_capex = safe_idx(y - capex_shift)
-            idx_disp = safe_idx(y - disp_shift)
+            idx_rev = np.clip(y - rev_shift, 0, years - 1)
+            idx_cs = np.clip(y - cs_shift, 0, years - 1)
+            idx_capex = np.clip(y - capex_shift, 0, years - 1)
+            idx_disp = np.clip(y - disp_shift, 0, years - 1)
 
             # -------- REVENUES --------
             if rev_min[idx_rev] == rev_mode[idx_rev] == rev_max[idx_rev] == 0:
                 revenue = 0
             else:
-                revenue = np.random.triangular(
-                    rev_min[idx_rev], rev_mode[idx_rev], rev_max[idx_rev]
-                )
+                revenue = np.random.triangular(rev_min[idx_rev], rev_mode[idx_rev], rev_max[idx_rev])
 
             # -------- COSTI VARIABILI --------
             if cs_min[idx_cs] == cs_mode[idx_cs] == cs_max[idx_cs] == 0:
                 cs = 0
             else:
-                cs = np.random.triangular(
-                    cs_min[idx_cs], cs_mode[idx_cs], cs_max[idx_cs]
-                )
+                cs = np.random.triangular(cs_min[idx_cs], cs_mode[idx_cs], cs_max[idx_cs])
 
             # -------- CAPEX (SHIFTATO) --------
             capex_y = capex[idx_capex]
@@ -123,11 +100,7 @@ def run_simulations(
             if disposal_min[idx_disp] == disposal_mode[idx_disp] == disposal_max[idx_disp] == 0:
                 disposal = 0
             else:
-                disposal = np.random.triangular(
-                    disposal_min[idx_disp],
-                    disposal_mode[idx_disp],
-                    disposal_max[idx_disp]
-                )
+                disposal = np.random.triangular(disposal_min[idx_disp], disposal_mode[idx_disp], disposal_max[idx_disp])
 
             # -------- COSTI FISSI E AMMORTAMENTI --------
             cf = costs_fixed[y]
@@ -154,15 +127,7 @@ def run_simulations(
         npv_list.append(npv)
         npv_cum_matrix[i, :] = npv_cum
 
-    return (
-        np.array(npv_list),
-        fcf_matrix,
-        fcf_pv_matrix,
-        npv_cum_matrix,
-        years_col,
-        costs_fixed,
-        capex
-    )
+    return np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix, years_col, costs_fixed, capex
 
 
 
@@ -440,6 +405,7 @@ if st.session_state.logged_in:
         st.download_button("Scarica Excel", data=output.getvalue(), file_name=f"{project_name}_sim.xlsx")
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
