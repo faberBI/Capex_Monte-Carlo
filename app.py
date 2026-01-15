@@ -18,32 +18,49 @@ from capex.visuals import (
 # -----------------------------
 # FUNZIONE SIMULAZIONE MONTE CARLO CON SHIFT MULTISTEP
 # -----------------------------
-def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
+def run_simulations(
+    df,
+    n_sim,
+    discount_rate,
+    tax_rate,
+    shift_probs,
+    shift_rev_pct,
+    shift_cs_pct,
+    shift_capex_pct,
+    enable_shift=True
+):
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
-    # Estrazione colonne con fallback a 0
-    rev_min = df.get('Revenues min', pd.Series([0]*years)).fillna(0).values
-    rev_mode = df.get('Revenues piano', pd.Series([0]*years)).fillna(0).values
-    rev_max = df.get('Revenues max', pd.Series([0]*years)).fillna(0).values
-    cs_min = df.get('Cost var min', pd.Series([0]*years)).fillna(0).values
-    cs_mode = df.get('Cost var piano', pd.Series([0]*years)).fillna(0).values
-    cs_max = df.get('Cost var max', pd.Series([0]*years)).fillna(0).values
-    costs_fixed = df.get('Costs fixed', pd.Series([0]*years)).fillna(0).values
-    amort = df.get('Amort, & Depreciation', pd.Series([0]*years)).fillna(0).values
-    capex = df.get('Capex', pd.Series([0]*years)).fillna(0).values
-    disposal_min = df.get('Disposal & Capex Saving min', pd.Series([0]*years)).fillna(0).values
-    disposal_mode = df.get('Disposal & Capex Saving', pd.Series([0]*years)).fillna(0).values
-    disposal_max = df.get('Disposal & Capex Saving max', pd.Series([0]*years)).fillna(0).values
-    change_wc = df.get('Change in working cap,', pd.Series([0]*years)).fillna(0).values
+    # -----------------------------
+    # INPUT CON FALLBACK A ZERO
+    # -----------------------------
+    rev_min = df.get('Revenues min', 0).fillna(0).values
+    rev_mode = df.get('Revenues piano', 0).fillna(0).values
+    rev_max = df.get('Revenues max', 0).fillna(0).values
 
-    # Matrici risultati
+    cs_min = df.get('Cost var min', 0).fillna(0).values
+    cs_mode = df.get('Cost var piano', 0).fillna(0).values
+    cs_max = df.get('Cost var max', 0).fillna(0).values
+
+    costs_fixed = df.get('Costs fixed', 0).fillna(0).values
+    amort = df.get('Amort, & Depreciation', 0).fillna(0).values
+    capex = df.get('Capex', 0).fillna(0).values
+
+    disposal_min = df.get('Disposal & Capex Saving min', 0).fillna(0).values
+    disposal_mode = df.get('Disposal & Capex Saving', 0).fillna(0).values
+    disposal_max = df.get('Disposal & Capex Saving max', 0).fillna(0).values
+
+    change_wc = df.get('Change in working cap,', 0).fillna(0).values
+
+    # -----------------------------
+    # OUTPUT MATRICES
+    # -----------------------------
     fcf_matrix = np.zeros((n_sim, years))
     fcf_pv_matrix = np.zeros((n_sim, years))
     npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
 
-    # Matrici per flussi originali e shiftati
     revenue_matrix_orig = np.zeros((n_sim, years))
     cs_matrix_orig = np.zeros((n_sim, years))
     capex_matrix_orig = np.zeros((n_sim, years))
@@ -52,89 +69,109 @@ def run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs):
     cs_matrix_shifted = np.zeros((n_sim, years))
     capex_matrix_shifted = np.zeros((n_sim, years))
 
-    # Funzione shift
+    # -----------------------------
+    # FUNZIONE SHIFT MULTISTEP
+    # -----------------------------
     def apply_shift(flow, probs, pct_shift):
         shifted = np.zeros_like(flow)
+
         for y in range(len(flow)):
-            # Determina quanto del flusso viene effettivamente shiftato
-            to_shift = flow[y] * (pct_shift / 100)
+            to_shift = flow[y] * pct_shift / 100
             remain = flow[y] - to_shift
-        
-            n_shift = np.random.choice([0,1,2], p=probs)
-            target = min(y + n_shift, len(flow)-1)
+
+            n_shift = np.random.choice([0, 1, 2], p=probs)
+            target = min(y + n_shift, len(flow) - 1)
+
             shifted[target] += to_shift
-        
-            # Mantieni il resto nell'anno originale
             shifted[y] += remain
+
         return shifted
-        
+
+    # -----------------------------
+    # MONTE CARLO
+    # -----------------------------
     for i in range(n_sim):
-        # Flussi per simulazione
+
         revenue_flows = np.zeros(years)
         cs_flows = np.zeros(years)
-        capex_flows = np.array(capex)  # Capex già noto
+        capex_flows = capex.copy()
         disposal_flows = np.zeros(years)
 
         for y in range(years):
-            # Ricavi
+
             if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
-                revenue = 0
+                revenue_flows[y] = 0
             else:
-                l, m, r = sorted([rev_min[y], rev_mode[y], rev_max[y]])
-                revenue = np.random.triangular(l, m, r)
-            revenue_flows[y] = revenue
+                revenue_flows[y] = np.random.triangular(
+                    *sorted([rev_min[y], rev_mode[y], rev_max[y]])
+                )
 
-            # Costi variabili
             if cs_min[y] == cs_mode[y] == cs_max[y] == 0:
-                cs = 0
+                cs_flows[y] = 0
             else:
-                l, m, r = sorted([cs_min[y], cs_mode[y], cs_max[y]])
-                cs = np.random.triangular(l, m, r)
-            cs_flows[y] = cs
+                cs_flows[y] = np.random.triangular(
+                    *sorted([cs_min[y], cs_mode[y], cs_max[y]])
+                )
 
-            # Disposal
             if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0:
-                disp = 0
+                disposal_flows[y] = 0
             else:
-                l, m, r = sorted([disposal_min[y], disposal_mode[y], disposal_max[y]])
-                disp = np.random.triangular(l, m, r)
-            disposal_flows[y] = disp
+                disposal_flows[y] = np.random.triangular(
+                    *sorted([disposal_min[y], disposal_mode[y], disposal_max[y]])
+                )
 
-        # Salva flussi originali
-        revenue_matrix_orig[i,:] = revenue_flows
-        cs_matrix_orig[i,:] = cs_flows
-        capex_matrix_orig[i,:] = capex_flows
+        # salva originali
+        revenue_matrix_orig[i] = revenue_flows
+        cs_matrix_orig[i] = cs_flows
+        capex_matrix_orig[i] = capex_flows
 
-        # Applica shift
-        revenue_flows_shifted = apply_shift(revenue_flows, shift_probs, shift_rev_pct)
-        cs_flows_shifted = apply_shift(cs_flows, shift_probs, shift_cs_pct)
-        capex_flows_shifted = apply_shift(capex_flows, shift_probs, shift_capex_pct)
+        # -----------------------------
+        # APPLICA (O NO) LO SHIFT
+        # -----------------------------
+        if enable_shift:
+            revenue_s = apply_shift(revenue_flows, shift_probs, shift_rev_pct)
+            cs_s = apply_shift(cs_flows, shift_probs, shift_cs_pct)
+            capex_s = apply_shift(capex_flows, shift_probs, shift_capex_pct)
+        else:
+            revenue_s = revenue_flows.copy()
+            cs_s = cs_flows.copy()
+            capex_s = capex_flows.copy()
 
-        # Salva flussi shiftati
-        revenue_matrix_shifted[i,:] = revenue_flows_shifted
-        cs_matrix_shifted[i,:] = cs_flows_shifted
-        capex_matrix_shifted[i,:] = capex_flows_shifted
+        revenue_matrix_shifted[i] = revenue_s
+        cs_matrix_shifted[i] = cs_s
+        capex_matrix_shifted[i] = capex_s
 
-        # FCF usando i flussi shiftati
-        ebitda = revenue_flows_shifted + cs_flows_shifted + costs_fixed
+        # -----------------------------
+        # FCF & DCF
+        # -----------------------------
+        ebitda = revenue_s + cs_s + costs_fixed
         ebit = ebitda + amort
         taxes = -ebit * tax_rate
-        fcf = ebitda + taxes + capex_flows_shifted + disposal_flows + change_wc
 
-        # DCF
-        fcf_pv = fcf / ((1 + discount_rate) ** (np.arange(1, years+1)))
+        fcf = ebitda + taxes + capex_s + disposal_flows + change_wc
+        fcf_pv = fcf / ((1 + discount_rate) ** np.arange(1, years + 1))
 
-        fcf_matrix[i,:] = fcf
-        fcf_pv_matrix[i,:] = fcf_pv
-        npv_list.append(np.sum(fcf_pv))
-        npv_cum_matrix[i,:] = np.cumsum(fcf_pv)
+        fcf_matrix[i] = fcf
+        fcf_pv_matrix[i] = fcf_pv
+        npv_cum_matrix[i] = np.cumsum(fcf_pv)
+        npv_list.append(fcf_pv.sum())
 
     return (
-        np.array(npv_list), fcf_matrix, fcf_pv_matrix, npv_cum_matrix,
-        years_col, costs_fixed, capex,
-        revenue_matrix_orig, cs_matrix_orig, capex_matrix_orig,
-        revenue_matrix_shifted, cs_matrix_shifted, capex_matrix_shifted
+        np.array(npv_list),
+        fcf_matrix,
+        fcf_pv_matrix,
+        npv_cum_matrix,
+        years_col,
+        costs_fixed,
+        capex,
+        revenue_matrix_orig,
+        cs_matrix_orig,
+        capex_matrix_orig,
+        revenue_matrix_shifted,
+        cs_matrix_shifted,
+        capex_matrix_shifted
     )
+
     
 # -----------------------------
 # CONFIGURAZIONE STREAMLIT
@@ -193,7 +230,8 @@ if st.session_state.logged_in:
         tax_rate = st.number_input("Aliquota fiscale (es. 0.25)", value=0.25, step=0.01, format="%.4f")
         n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000, value=2000, step=100)
         seed = st.number_input("Seed (0=random)", value=0)
-
+        enable_shift = st.checkbox("Abilita shift temporale", value=True)
+        
         st.markdown("### Shift probabilistici multistep")
         shift_0 = st.slider("Probabilità rimanere stesso anno", 0.0, 1.0, 0.3)
         shift_1 = st.slider("Probabilità shift 1 anno", 0.0, 1.0, 0.5)
@@ -215,14 +253,17 @@ if st.session_state.logged_in:
         df = pd.read_excel(uploaded_file)
         st.dataframe(df)
         # ------------------------- RUN SIMULATION -------------------------
-        results = run_simulations(df, n_sim, discount_rate, tax_rate, shift_probs)
-        (
-        npv_array, fcf_matrix, fcf_pv_matrix, npv_cum_matrix, 
-        years_col, costs_fixed, capex,
-        revenue_matrix_orig, cs_matrix_orig, capex_matrix_orig,
-        revenue_matrix_shifted, cs_matrix_shifted, capex_matrix_shifted
-        ) = results
-
+        results = run_simulations(
+            df=df,
+            n_sim=n_sim,
+            discount_rate=discount_rate,
+            tax_rate=tax_rate,
+            shift_probs=shift_probs,
+            shift_rev_pct=shift_rev_pct,
+            shift_cs_pct=shift_cs_pct,
+            shift_capex_pct=shift_capex_pct,
+            enable_shift=enable_shift
+            )
         n_sim_mean = min(1000, n_sim)  # numero di simulazioni da considerare per la media  
         revenue_mean_orig = revenue_matrix_orig.mean(axis=0)
         cs_mean_orig = cs_matrix_orig.mean(axis=0)
@@ -347,6 +388,7 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
