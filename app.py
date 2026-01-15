@@ -264,6 +264,21 @@ if st.session_state.logged_in:
             shift_capex_pct=shift_capex_pct,
             enable_shift=enable_shift
             )
+        (
+        npv_array,
+        fcf_matrix,
+        fcf_pv_matrix,
+        npv_cum_matrix,
+        years_col,
+        costs_fixed,
+        capex,
+        revenue_matrix_orig,
+        cs_matrix_orig,
+        capex_matrix_orig,
+        revenue_matrix_shifted,
+        cs_matrix_shifted,
+        capex_matrix_shifted
+        ) = results
         n_sim_mean = min(1000, n_sim)  # numero di simulazioni da considerare per la media  
         revenue_mean_orig = revenue_matrix_orig.mean(axis=0)
         cs_mean_orig = cs_matrix_orig.mean(axis=0)
@@ -388,6 +403,7 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
+
 
 
 
