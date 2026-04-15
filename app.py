@@ -33,7 +33,7 @@ def run_simulations(
     years_col = df.iloc[:, 0].values
 
     # -----------------------------
-    # INPUT CON FALLBACK A ZERO
+    # INPUT BASE
     # -----------------------------
     rev_min = df.get('Revenues min', 0).fillna(0).values
     rev_mode = df.get('Revenues piano', 0).fillna(0).values
@@ -54,6 +54,13 @@ def run_simulations(
     change_wc = df.get('Change in working cap,', 0).fillna(0).values
 
     # -----------------------------
+    # 💰 DEBT (NEW - DETERMINISTIC)
+    # -----------------------------
+    debt_inflow = df.get('Debt inflow', pd.Series(0, index=df.index)).fillna(0).values
+    debt_repayment = df.get('Debt repayment', pd.Series(0, index=df.index)).fillna(0).values
+    interest_rate = df.get('Interest rate', pd.Series(0.05, index=df.index)).fillna(0.05).values
+
+    # -----------------------------
     # OUTPUT MATRICES
     # -----------------------------
     fcf_matrix = np.zeros((n_sim, years))
@@ -70,7 +77,7 @@ def run_simulations(
     capex_matrix_shifted = np.zeros((n_sim, years))
 
     # -----------------------------
-    # FUNZIONE SHIFT MULTISTEP
+    # SHIFT FUNCTION
     # -----------------------------
     def apply_shift(flow, probs, pct_shift):
         shifted = np.zeros_like(flow)
@@ -97,6 +104,13 @@ def run_simulations(
         capex_flows = capex.copy()
         disposal_flows = np.zeros(years)
 
+        interest_flows = np.zeros(years)
+
+        debt_stock = 0  # 🔥 NEW
+
+        # -----------------------------
+        # GENERAZIONE FLUSSI
+        # -----------------------------
         for y in range(years):
 
             if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
@@ -126,7 +140,7 @@ def run_simulations(
         capex_matrix_orig[i] = capex_flows
 
         # -----------------------------
-        # APPLICA (O NO) LO SHIFT
+        # SHIFT
         # -----------------------------
         if enable_shift:
             revenue_s = apply_shift(revenue_flows, shift_probs, shift_rev_pct)
@@ -142,13 +156,23 @@ def run_simulations(
         capex_matrix_shifted[i] = capex_s
 
         # -----------------------------
-        # FCF & DCF
+        # FCF CALCULATION
         # -----------------------------
+        for y in range(years):
+
+            # 💰 DEBT UPDATE (deterministico)
+            debt_stock += debt_inflow[y]
+            debt_stock -= debt_repayment[y]
+            debt_stock = max(debt_stock, 0)
+
+            interest_expense = -debt_stock * interest_rate[y]
+            interest_flows[y] = interest_expense
+
         ebitda = revenue_s + cs_s + costs_fixed
         ebit = ebitda + amort
         taxes = -ebit * tax_rate
 
-        fcf = ebitda + taxes + capex_s + disposal_flows + change_wc
+        fcf = ebitda + taxes + interest_flows + capex_s + disposal_flows + change_wc
         fcf_pv = fcf / ((1 + discount_rate) ** np.arange(1, years + 1))
 
         fcf_matrix[i] = fcf
