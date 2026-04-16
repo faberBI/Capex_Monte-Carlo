@@ -172,7 +172,7 @@ def run_simulations(
         ebit = ebitda + amort
         taxes = -ebit * tax_rate
 
-        fcf = ebitda + taxes + interest_flows + capex_s + disposal_flows + change_wc
+        fcf = ebitda + taxes + interest_flows - debt_repayment + capex_s + disposal_flows + change_wc
         fcf_pv = fcf / ((1 + discount_rate) ** np.arange(1, years + 1))
 
         fcf_matrix[i] = fcf
