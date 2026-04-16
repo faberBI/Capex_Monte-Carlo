@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
+import hashlib
+import json
+from PIL import Image
 
 from capex.visuals import (
     plot_npv_distribution,
