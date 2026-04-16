@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
 
-
 # ------------------------- Funzioni di plotting -------------------------
 def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
     fig, ax = plt.subplots()
@@ -90,9 +89,7 @@ def plot_payback_distribution(payback_array, project_name):def plot_payback_dist
     ax.set_ylabel("Frequenza")
     ax.grid(True, alpha=0.3)
     return fig
-    fig, ax = plt.subplots(figsize=(10, 5))
-
-  
+    fig, ax = plt.subplots(figsize=(10, 5)) 
     
 def plot_probs_kri(downside_prob, project_name):
     """
