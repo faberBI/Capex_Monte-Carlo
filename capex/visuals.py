@@ -67,15 +67,32 @@ def plot_cumulative_npv(npv_cum_matrix, proj_name):
     ax.legend()
     return fig
 
-def plot_payback_distribution(payback_array, name):
-    fig, ax = plt.subplots(figsize=(8,5))
-    ax.hist(payback_array[~np.isnan(payback_array)], bins=range(1, int(np.nanmax(payback_array))+2),
-            color="#f97316", edgecolor='black', alpha=0.7)
-    ax.set_xlabel("Anno payback")
+def plot_payback_distribution(payback_array, project_name):def plot_payback_distribution(pay finite values
+    pb = payback_array[np.isfinite(payback_array)]
+
+    if pb.size == 0:
+        ax.text(0.5, 0.5,
+                "Payback non raggiunto nell’orizzonte di piano\n(in tutte le simulazioni)",
+                ha="center", va="center", fontsize=12)
+        ax.set_title(f"Distribuzione Payback Period - {project_name}")
+        ax.set_xlabel("Anni")
+        ax.set_ylabel("Frequenza")
+        ax.set_axis_off()
+        return fig
+
+    # Optional: cap bins to avoid crazy ranges if pb is very large
+    max_bin = int(np.ceil(np.nanmax(pb)))
+    max_bin = max(max_bin, 1)
+
+    ax.hist(pb, bins=range(1, max_bin + 2), alpha=0.75, edgecolor="black")
+    ax.set_title(f"Distribuzione Payback Period - {project_name}")
+    ax.set_xlabel("Anni")
     ax.set_ylabel("Frequenza")
-    ax.set_title(f"Distribuzione payback period - {name}")
+    ax.grid(True, alpha=0.3)
     return fig
-    
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+  
     
 def plot_probs_kri(downside_prob, project_name):
     """
