@@ -330,6 +330,7 @@ if st.session_state.logged_in:
         revenue_mean_shifted = revenue_matrix_shifted.mean(axis=0)
         cs_mean_shifted = cs_matrix_shifted.mean(axis=0)
         capex_mean_shifted = capex_matrix_shifted.mean(axis=0)
+        
          # Grafico comparativo
         plt.figure(figsize=(12,6))
         plt.plot(years_col, revenue_mean_orig, marker='o', label="Ricavi originali")
@@ -491,12 +492,3 @@ if st.session_state.logged_in:
 
 else:
     st.info("🔹 Completa il login per accedere alla web-app!")
-
-
-
-
-
-
-
-
-
