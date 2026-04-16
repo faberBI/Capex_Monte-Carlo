@@ -264,7 +264,7 @@ if st.session_state.logged_in:
     st.title("NPV @Risk Simulation Tool by ERM")
 
     uploaded_file = st.file_uploader("Carica file Excel", type=['xlsx','xls'])
-
+    
     with st.sidebar:
         st.header("Parametri simulazione")
         project_name = st.text_input("Nome progetto", value="Progetto 1")
@@ -294,6 +294,11 @@ if st.session_state.logged_in:
             np.random.seed(int(seed))
         df = pd.read_excel(uploaded_file)
         st.dataframe(df)
+        
+        # --- baseline deterministic dal file ---
+        costs_fixed_vec = df.get('Costs fixed', 0).fillna(0).to_numpy()
+        capex_vec       = df.get('Capex', 0).fillna(0).to_numpy()
+
         # ------------------------- RUN SIMULATION -------------------------
         results = run_simulations(
             df=df,
@@ -402,16 +407,23 @@ if st.session_state.logged_in:
                     irr_matrix[i, j] = 0
 
         # ------------------------- PPI -------------------------
+        # ------------------------- PPI -------------------------
+        # baseline deterministic dal file (stesso orizzonte di fcf_matrix)
+        costs_fixed_vec = df.get('Costs fixed', 0).fillna(0).to_numpy()
+        capex_vec       = df.get('Capex', 0).fillna(0).fillna(0).to_numpy()
+
+        n_years = fcf_matrix.shape[1]
+        disc = ((1 + discount_rate) ** np.arange(1, n_years + 1))
+
+        # costo cumulato PV (deterministico) usato come denominatore
+        cost_total = (np.abs(costs_fixed_vec[:n_years]) + np.abs(capex_vec[:n_years])) / disc
+        cost_total_cum = np.cumsum(cost_total)
+
         profit_index_array = []
         for i in range(fcf_matrix.shape[0]):
-            fcf = fcf_pv_matrix[i, :]
-            npv_cum = np.cumsum(fcf)
-            cost_total = np.abs(costs_fixed) + np.abs(capex)
-            cost_total = cost_total / ((1 + discount_rate) ** np.arange(1, n_years + 1))
-            cost_total_cum = np.cumsum(cost_total)
+            npv_cum = np.cumsum(fcf_pv_matrix[i, :])
             profit_index_array.append(npv_cum / cost_total_cum)
         profit_index_array = np.array(profit_index_array)
-
         # ------------------------- Percentili -------------------------
         ppi_min = np.nanmin(profit_index_array, axis=0)
         ppi_p5 = np.nanpercentile(profit_index_array, 5, axis=0)
