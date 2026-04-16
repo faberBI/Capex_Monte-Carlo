@@ -5,16 +5,21 @@ import plotly.graph_objects as go
 # ------------------------- Funzioni di plotting -------------------------
 
 def plot_npv_distribution(npv_array, expected_npv, percentile_5, name):
-        high_cf = np.percentile(yearly_cash_flows, 95, axis=0)
-        x = np.arange(1, years + 1)
-        fig, ax = plt.subplots()
-        ax.bar(x, mean_cf, color="#3b82f6", alpha=0.7, label="Cash Flow Medio")
-        ax.fill_between(x, low_cf, high_cf, color="#93c5fd", alpha=0.4, label="5%-95% intervallo")
-        ax.set_xlabel("Anno")
-        ax.set_ylabel("Cash Flow")
-        ax.set_title(f"Cash Flow annuo medio - {name}")
-        ax.legend()
-        return fig     
+    npv_array = np.array(npv_array, dtype=float)
+
+    fig, ax = plt.subplots()
+    ax.hist(npv_array, bins=50, alpha=0.7, color="#3b82f6", edgecolor="black")
+    ax.axvline(expected_npv, color="g", linestyle="--", label="Expected NPV")
+    ax.axvline(percentile_5, color="r", linestyle="--", label="VaR 95%")
+    ax.axvline(0, color="black", linestyle=":", linewidth=1, label="Break-even (NPV=0)")
+
+    ax.set_title(f"Distribuzione NPV - {name}")
+    ax.set_xlabel("NPV")
+    ax.set_ylabel("Frequenza")
+    ax.legend()
+    ax.grid(True, alpha=0.2)
+
+    return fig  
 
 
 def plot_cumulative_npv(npv_cum_matrix, proj_name):
