@@ -5,14 +5,17 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from io import BytesIO
 import numpy_financial as npf
-import hashlib
-import json
-from PIL import Image
 
 from capex.visuals import (
-    plot_npv_distribution, plot_boxplot, plot_cashflows,
-    plot_cumulative_npv, plot_payback_distribution, plot_probs_kri,
-    plot_car_kri, plot_irr_trends, plot_ppi_distribution
+    plot_npv_distribution,
+    plot_boxplot,
+    plot_cashflows,
+    plot_cumulative_npv,
+    plot_payback_distribution,
+    plot_probs_kri,
+    plot_car_kri,
+    plot_irr_trends,
+    plot_ppi_distribution,
 )
 
 # -----------------------------
