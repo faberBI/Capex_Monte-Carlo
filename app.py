@@ -425,6 +425,7 @@ if st.session_state.logged_in:
         irr_p95 = np.nanpercentile(irr_matrix, 95, axis=0)
         irr_max = np.nanmax(irr_matrix, axis=0)
 
+        npv_cum_matrix = np.cumsum(fcf_pv_matrix, axis=1)
         # ------------------------- GRAFICI -------------------------
         st.pyplot(plot_npv_distribution(npv_array, expected_npv, percentile_5, project_name))
         st.pyplot(plot_boxplot(npv_array, project_name))
