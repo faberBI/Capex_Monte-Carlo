@@ -306,17 +306,17 @@ if st.session_state.logged_in:
             shift_capex_pct=shift_capex_pct,
             enable_shift=enable_shift)
         (
-        npv_array,                
-        fcf_matrix,               
-        fcf_pv_matrix,            
-        dscr_matrix,              
-        years_col,                
-        revenue_matrix_orig,      
-        cs_matrix_orig,           
-        capex_matrix_orig,        
-        revenue_matrix_shifted,   
-        cs_matrix_shifted,        
-        capex_matrix_shifted 
+            npv_array,
+            fcf_matrix,
+            fcf_pv_matrix,
+            dscr_matrix,
+            revenue_matrix_orig,
+            cs_matrix_orig,
+            capex_matrix_orig,
+            revenue_matrix_shifted,
+            cs_matrix_shifted,
+            capex_matrix_shifted,
+            years_col
         ) = results
         n_sim_mean = min(1000, n_sim)  # numero di simulazioni da considerare per la media  
         revenue_mean_orig = revenue_matrix_orig.mean(axis=0)
