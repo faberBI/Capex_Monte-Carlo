@@ -16,7 +16,7 @@ from capex.visuals import (
 )
 
 # -----------------------------
-# FUNZIONE SIMULAZIONE MONTE CARLO CON SHIFT MULTISTEP
+# FUNZIONE MONTE CARLO + SHIFT + DSCR
 # -----------------------------
 def run_simulations(
     df,
@@ -29,6 +29,7 @@ def run_simulations(
     shift_capex_pct,
     enable_shift=True
 ):
+
     years = df.shape[0]
     years_col = df.iloc[:, 0].values
 
@@ -54,19 +55,20 @@ def run_simulations(
     change_wc = df.get('Change in working cap,', 0).fillna(0).values
 
     # -----------------------------
-    # 💰 DEBT (NEW - DETERMINISTIC)
+    # DEBT
     # -----------------------------
     debt_inflow = df.get('Debt inflow', pd.Series(0, index=df.index)).fillna(0).values
     debt_repayment = df.get('Debt repayment', pd.Series(0, index=df.index)).fillna(0).values
     interest_rate = df.get('Interest rate', pd.Series(0.05, index=df.index)).fillna(0.05).values
 
     # -----------------------------
-    # OUTPUT MATRICES
+    # OUTPUT
     # -----------------------------
     fcf_matrix = np.zeros((n_sim, years))
     fcf_pv_matrix = np.zeros((n_sim, years))
-    npv_cum_matrix = np.zeros((n_sim, years))
     npv_list = []
+
+    dscr_matrix = np.zeros((n_sim, years))   # 🔥 NEW
 
     revenue_matrix_orig = np.zeros((n_sim, years))
     cs_matrix_orig = np.zeros((n_sim, years))
@@ -103,41 +105,26 @@ def run_simulations(
         cs_flows = np.zeros(years)
         capex_flows = capex.copy()
         disposal_flows = np.zeros(years)
-
         interest_flows = np.zeros(years)
 
-        debt_stock = 0  # 🔥 NEW
+        debt_stock = 0
 
         # -----------------------------
         # GENERAZIONE FLUSSI
         # -----------------------------
         for y in range(years):
 
-            if rev_min[y] == rev_mode[y] == rev_max[y] == 0:
-                revenue_flows[y] = 0
-            else:
-                revenue_flows[y] = np.random.triangular(
-                    *sorted([rev_min[y], rev_mode[y], rev_max[y]])
-                )
+            revenue_flows[y] = 0 if rev_min[y] == rev_mode[y] == rev_max[y] == 0 else np.random.triangular(
+                *sorted([rev_min[y], rev_mode[y], rev_max[y]])
+            )
 
-            if cs_min[y] == cs_mode[y] == cs_max[y] == 0:
-                cs_flows[y] = 0
-            else:
-                cs_flows[y] = np.random.triangular(
-                    *sorted([cs_min[y], cs_mode[y], cs_max[y]])
-                )
+            cs_flows[y] = 0 if cs_min[y] == cs_mode[y] == cs_max[y] == 0 else np.random.triangular(
+                *sorted([cs_min[y], cs_mode[y], cs_max[y]])
+            )
 
-            if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0:
-                disposal_flows[y] = 0
-            else:
-                disposal_flows[y] = np.random.triangular(
-                    *sorted([disposal_min[y], disposal_mode[y], disposal_max[y]])
-                )
-
-        # salva originali
-        revenue_matrix_orig[i] = revenue_flows
-        cs_matrix_orig[i] = cs_flows
-        capex_matrix_orig[i] = capex_flows
+            disposal_flows[y] = 0 if disposal_min[y] == disposal_mode[y] == disposal_max[y] == 0 else np.random.triangular(
+                *sorted([disposal_min[y], disposal_mode[y], disposal_max[y]])
+            )
 
         # -----------------------------
         # SHIFT
@@ -151,49 +138,80 @@ def run_simulations(
             cs_s = cs_flows.copy()
             capex_s = capex_flows.copy()
 
+        revenue_matrix_orig[i] = revenue_flows
+        cs_matrix_orig[i] = cs_flows
+        capex_matrix_orig[i] = capex_flows
+
         revenue_matrix_shifted[i] = revenue_s
         cs_matrix_shifted[i] = cs_s
         capex_matrix_shifted[i] = capex_s
 
         # -----------------------------
-        # FCF CALCULATION
+        # DEBT + FCF + DSCR
         # -----------------------------
         for y in range(years):
 
-            # 💰 DEBT UPDATE (deterministico)
-            debt_stock += debt_inflow[y]
-            debt_stock -= debt_repayment[y]
+            prev_debt = debt_stock
+
+            # interessi su stock iniziale periodo
+            interest_flows[y] = -prev_debt * interest_rate[y]
+
+            # aggiorna debito
+            debt_stock = prev_debt + debt_inflow[y] - debt_repayment[y]
             debt_stock = max(debt_stock, 0)
 
-            interest_expense = -debt_stock * interest_rate[y]
-            interest_flows[y] = interest_expense
+            # -------------------------
+            # EBITDA / EBIT / TAX
+            # -------------------------
+            ebitda = revenue_s[y] + cs_s[y] + costs_fixed[y]
+            ebit = ebitda + amort[y]
 
-        ebitda = revenue_s + cs_s + costs_fixed
-        ebit = ebitda + amort
-        taxes = -ebit * tax_rate
+            taxes = -np.maximum(ebit, 0) * tax_rate
 
-        fcf = ebitda + taxes + interest_flows - debt_repayment + capex_s + disposal_flows + change_wc
-        fcf_pv = fcf / ((1 + discount_rate) ** np.arange(1, years + 1))
+            # -------------------------
+            # FCF (correct order)
+            # -------------------------
+            fcf_y = (
+                ebitda
+                + taxes
+                + interest_flows[y]
+                - debt_repayment[y]
+                + capex_s[y]
+                + disposal_flows[y]
+                + change_wc[y]
+            )
 
-        fcf_matrix[i] = fcf
+            fcf_matrix[i, y] = fcf_y
+
+            # -------------------------
+            # DSCR
+            # -------------------------
+            debt_service = (-interest_flows[y] + debt_repayment[y])
+
+            if debt_service > 0:
+                dscr_matrix[i, y] = fcf_y / debt_service
+            else:
+                dscr_matrix[i, y] = np.nan
+
+        # -----------------------------
+        # DISCOUNTING
+        # -----------------------------
+        fcf_pv = fcf_matrix[i] / ((1 + discount_rate) ** np.arange(1, years + 1))
         fcf_pv_matrix[i] = fcf_pv
-        npv_cum_matrix[i] = np.cumsum(fcf_pv)
-        npv_list.append(fcf_pv.sum())
+        npv_list.append(np.sum(fcf_pv))
 
     return (
         np.array(npv_list),
         fcf_matrix,
         fcf_pv_matrix,
-        npv_cum_matrix,
-        years_col,
-        costs_fixed,
-        capex,
+        dscr_matrix,   # 🔥 NEW OUTPUT
         revenue_matrix_orig,
         cs_matrix_orig,
         capex_matrix_orig,
         revenue_matrix_shifted,
         cs_matrix_shifted,
-        capex_matrix_shifted
+        capex_matrix_shifted,
+        years_col
     )
 
     
@@ -286,12 +304,12 @@ if st.session_state.logged_in:
             shift_rev_pct=shift_rev_pct,
             shift_cs_pct=shift_cs_pct,
             shift_capex_pct=shift_capex_pct,
-            enable_shift=enable_shift
-            )
+            enable_shift=enable_shift)
         (
         npv_array,
         fcf_matrix,
         fcf_pv_matrix,
+        dscr_matrix,   # 🔥 NEW
         npv_cum_matrix,
         years_col,
         costs_fixed,
@@ -332,6 +350,28 @@ if st.session_state.logged_in:
         st.metric("Expected NPV", f"{expected_npv:,.2f}")
         st.metric("VaR 95% (CaR)", f"{percentile_5:,.2f}")
         st.metric("Probabilità NPV<0", f"{downside_prob*100:.2f}%")
+        # ------------------------- DSCR KPI -------------------------
+        dscr_mean = np.nanmean(dscr_matrix)
+        dscr_p5 = np.nanpercentile(dscr_matrix, 5)
+        dscr_default_prob = np.mean(dscr_matrix < 1)
+
+        st.metric("DSCR medio", f"{dscr_mean:.2f}")
+        st.metric("DSCR P5 (stress)", f"{dscr_p5:.2f}")
+        st.metric("Probabilità DSCR < 1", f"{dscr_default_prob*100:.2f}%")
+
+        def dscr_rating(x):
+            if x < 1:
+                return "🔴 Default Risk"
+            elif x < 1.2:
+                return "🟠 Weak"
+            elif x < 1.5:
+                return "🟡 Acceptable"
+            else:
+                return "🟢 Strong"
+
+        rating = dscr_rating(dscr_mean)
+        st.subheader("Credit Rating")
+        st.write(f"Rating progetto: **{rating}**")
 
         # ------------------------- PAYBACK -------------------------
         payback_array = []
@@ -396,6 +436,20 @@ if st.session_state.logged_in:
         st.pyplot(plot_payback_distribution(payback_array, project_name))
         st.pyplot(plot_irr_trends(irr_p5, irr_p50, irr_p95, years_labels=df['Anno'].to_list(), title="Andamento IRR per anno", figsize=(10,6)))
         st.pyplot(plot_ppi_distribution(ppi_min, ppi_p5, ppi_p50, ppi_p95, ppi_max, years_labels=df['Anno'].to_list(), title="Andamento PPI per anno", figsize=(10,6)))
+        dscr_mean_curve = np.nanmean(dscr_matrix, axis=0)
+        dscr_p5_curve = np.nanpercentile(dscr_matrix, 5, axis=0)
+        plt.figure(figsize=(10,5))
+        plt.plot(years_col, dscr_mean_curve, label="DSCR medio", marker='o')
+        plt.plot(years_col, dscr_p5_curve, label="DSCR P5 (stress)", linestyle="--")
+        plt.axhline(1, color="red", linestyle="--", label="Default (1.0)")
+        plt.axhline(1.2, color="orange", linestyle="--", label="Bank threshold (1.2)")
+        plt.axhline(1.5, color="green", linestyle="--", label="Strong (1.5)")
+        plt.title("DSCR Profile")
+        plt.xlabel("Anno")
+        plt.ylabel("DSCR")
+        plt.grid()
+        plt.legend()
+        st.pyplot(plt)
 
         # ------------------------- KRI -------------------------
         st.plotly_chart(plot_car_kri(percentile_5, expected_npv, project_name))
