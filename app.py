@@ -225,7 +225,7 @@ def run_simulations(
 # CONFIGURAZIONE STREAMLIT
 # -----------------------------
 #logo = Image.open("Image/logo_fibercop.PNG")
-st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon=logo , layout="wide")
+#st.set_page_config(page_title="NPV @Risk Tool by ERM Fibercop", page_icon=logo , layout="wide")
 #st.image(logo, width=300)
 st.markdown("""
 <h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>NPV @Risk Simulation Tool by ERM</h1>
