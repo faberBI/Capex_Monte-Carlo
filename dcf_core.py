@@ -208,27 +208,56 @@ def sample_marginal(u2d, spec, lo, mode, hi):
     return triangular_ppf(u2d, lo, mode, hi)
 
 
+def _lhs_uniform(n, d, rng):
+    """Campionamento Latin Hypercube: n punti su [0,1]^d, ogni dimensione stratificata
+    in n bin equiprobabili (uno per bin), con permutazione casuale indipendente per colonna.
+    Rispetto al casuale puro copre lo spazio in modo piu' uniforme -> stime meno rumorose
+    a parita' di simulazioni."""
+    n = int(n)
+    strat = (np.arange(n)[:, None] + rng.random((n, d))) / n   # un punto per strato
+    for j in range(d):
+        rng.shuffle(strat[:, j])                                # decorrela le colonne
+    return strat
+
+
+def lhs_standard_normal(n, d, rng):
+    """Normali standard N(0,1) generate via Latin Hypercube (stratificazione per dimensione)."""
+    u = _clip01(_lhs_uniform(n, d, rng))
+    return _ndtri(u)
+
+
 def correlated_uniforms(n_sim, years, corr, persistence, rng,
-                        copula="gaussian", copula_df=8.0):
+                        copula="gaussian", copula_df=8.0, sampling="lhs"):
     """Copula (gaussiana o t di Student) con persistenza AR(1).
 
     corr        : matrice 3x3 di correlazione tra {ricavi, costi var, disposal}
     persistence : coefficiente AR(1) sull'orizzonte temporale (0 = anni indipendenti)
     copula      : 'gaussian' | 't'
     copula_df   : gradi di liberta' della t (piu' bassi = code piu' spesse / dipendenza di coda)
+    sampling    : 'lhs' (Latin Hypercube, default) | 'random' (Monte Carlo casuale puro)
 
     Ritorna un array uniforme [n_sim, years, 3]. Le marginali vengono imposte a valle.
 
     Perche' la copula t: la gaussiana ha dipendenza di coda nulla, cioe' sottostima la
     probabilita' che piu' fattori vadano male INSIEME in uno scenario estremo (la lezione
     del 2008). La t introduce dipendenza di coda: proprio cio' che serve a un tool di rischio.
+
+    Perche' LHS: stratifica le innovazioni indipendenti prima di correlarle e attualizzare,
+    riducendo la varianza delle stime (media, VaR, probabilita') a parita' di n_sim.
     """
     L = np.linalg.cholesky(nearest_correlation(corr))
     phi = float(np.clip(persistence, -0.999, 0.999))
+
+    # innovazioni indipendenti: 3 voci x ogni anno. Con LHS sono stratificate.
+    if str(sampling).lower() == "lhs":
+        eps = lhs_standard_normal(n_sim, years * 3, rng).reshape(n_sim, years, 3)
+    else:
+        eps = rng.standard_normal((n_sim, years, 3))
+
     z = np.empty((n_sim, years, 3))
     prev = None
     for t in range(years):
-        shock = rng.standard_normal((n_sim, 3)) @ L.T  # innovazioni correlate, varianza unitaria
+        shock = eps[:, t, :] @ L.T                     # innovazioni correlate, varianza unitaria
         if t == 0:
             z[:, t, :] = shock
         else:
@@ -240,7 +269,12 @@ def correlated_uniforms(n_sim, years, corr, persistence, rng,
         # fra tutte le voci e tutti gli anni -> in uno scenario estremo TUTTO va male
         # insieme (regime di crisi). df alto -> torna alla gaussiana.
         nu = max(float(copula_df), 2.1)
-        w = rng.chisquare(nu, size=(n_sim, 1, 1))
+        from scipy.stats import chi2 as _chi2
+        if str(sampling).lower() == "lhs":
+            wu = _clip01(_lhs_uniform(n_sim, 1, rng))          # anche il mixing e' stratificato
+            w = _chi2.ppf(wu, nu).reshape(n_sim, 1, 1)
+        else:
+            w = rng.chisquare(nu, size=(n_sim, 1, 1))
         z_t = z / np.sqrt(w / nu)
         from scipy.stats import t as _t
         return _t.cdf(z_t, nu)
@@ -329,6 +363,9 @@ class SimConfig:
     copula: str = "gaussian"         # "gaussian" | "t"
     copula_df: float = 8.0           # gradi di liberta' della t (bassi = code piu' spesse)
 
+    # --- schema di campionamento ---
+    sampling: str = "lhs"            # "lhs" (Latin Hypercube) | "random" (Monte Carlo puro)
+
     # --- performance ---
     irr_subsample: int = 3000        # n. simulazioni per la curva IRR (npf.irr e' lento)
 
@@ -408,7 +445,8 @@ def run_simulations(df, cfg: SimConfig):
         [cfg.corr_rev_disp, cfg.corr_cost_disp, 1.0],
     ])
     u = correlated_uniforms(n_sim, years, R, cfg.persistence, rng,
-                            copula=cfg.copula, copula_df=cfg.copula_df)  # [n_sim, years, 3]
+                            copula=cfg.copula, copula_df=cfg.copula_df,
+                            sampling=cfg.sampling)  # [n_sim, years, 3]
 
     # ---- marginali selezionabili per fattore (la copula resta invariata) ----
     revenue_orig = sample_marginal(u[:, :, 0], cfg.dist_revenue, rev_lo, rev_mid, rev_hi)
@@ -494,11 +532,23 @@ def run_simulations(df, cfg: SimConfig):
     has_debt = bool(np.isfinite(dscr).any())
 
     # ---- campioni per driver (per l'analisi di sensibilita' Monte Carlo) ----
-    # aggrego ogni fattore stocastico come contributo attualizzato: monotono con l'NPV.
+    # Peso di attualizzazione EFFICACE per fattore: include il canale del VALORE TERMINALE,
+    # cosi' quando il TV domina l'importanza di ricavi/costi non risulta artificialmente nulla.
+    # (Si usa la correlazione di RANGO, quindi una scala costante e' irrilevante: conta il
+    #  peso RELATIVO tra gli anni, che il TV modifica caricando l'ultimo anno.)
+    inv = 1.0 / disc
+    w_rev, w_cost, w_disp = inv.copy(), inv.copy(), inv.copy()
+    _m = cfg.tv_method.lower()
+    if _m == "gordon" and cfg.discount_rate > cfg.tv_growth:
+        tvw = (1.0 + cfg.tv_growth) / (cfg.discount_rate - cfg.tv_growth) / disc[-1]
+        w_rev[-1] += tvw; w_cost[-1] += tvw; w_disp[-1] += tvw   # FCF terminale include tutto
+    elif _m == "multiple":
+        tvw = cfg.tv_multiple / disc[-1]
+        w_rev[-1] += tvw; w_cost[-1] += tvw                      # multiplo su EBITDA (no disposal)
     driver_samples = {
-        "Ricavi": (revenue / disc[None, :]).sum(axis=1),
-        "Costi variabili": (cs / disc[None, :]).sum(axis=1),
-        "Disposal": (disposal / disc[None, :]).sum(axis=1),
+        "Ricavi": (revenue * w_rev[None, :]).sum(axis=1),
+        "Costi variabili": (cs * w_cost[None, :]).sum(axis=1),
+        "Disposal": (disposal * w_disp[None, :]).sum(axis=1),
     }
     if cfg.enable_shift and delay_severity is not None:
         driver_samples["Ritardo (anni)"] = delay_severity.astype(float)
@@ -774,6 +824,60 @@ def two_way_sensitivity(df, cfg, x_param, x_values, y_param, y_values):
 
 
 # ==========================================================================
+# 6b. AFFIDABILITA' DELLE STIME (errore standard + intervalli di confidenza)
+# ==========================================================================
+def _metrics_from_npv(npv, loss_threshold=0.0):
+    """Metriche chiave da un vettore di NPV."""
+    npv = np.asarray(npv, float)
+    return {
+        "E[NPV] (media)": float(npv.mean()),
+        "Mediana": float(np.median(npv)),
+        "VaR 95% (P5)": float(np.percentile(npv, 5)),
+        "VaR 99% (P1)": float(np.percentile(npv, 1)),
+        "P(NPV<0)": float(np.mean(npv < loss_threshold)),
+        "Dev. standard": float(npv.std(ddof=1)),
+    }
+
+
+def estimate_with_ci(df, cfg, n_batches=20, confidence=0.95, loss_threshold=0.0):
+    """Stima puntuale + errore standard + intervallo di confidenza per le metriche chiave.
+
+    Metodo della REPLICAZIONE: si eseguono n_batches simulazioni indipendenti; la metrica
+    e' calcolata su ciascun batch e l'errore standard e' la deviazione tra i batch diviso
+    sqrt(n_batches). E' valido per QUALSIASI schema di campionamento — LHS compreso — mentre
+    la formula std/sqrt(n) NON lo sarebbe con LHS (i campioni non sono indipendenti).
+    La stima puntuale usa il campione aggregato (n_batches x n_sim), piu' preciso.
+
+    Cosi' il VaR non e' piu' un numero 'nudo': arriva con la sua barra d'errore a quel
+    numero di simulazioni, e con LHS quella barra si stringe."""
+    from dataclasses import replace
+    n_batches = max(int(n_batches), 2)
+    z = float(-_ndtri((1.0 - confidence) / 2.0))
+    base_seed = int(cfg.seed) if cfg.seed else 12345
+
+    pooled = []
+    per_batch = {}
+    for b in range(n_batches):
+        cfg_b = replace(cfg, seed=base_seed + 1000 * (b + 1))
+        npv_b = run_simulations(df, cfg_b)["npv"]
+        pooled.append(npv_b)
+        for k, v in _metrics_from_npv(npv_b, loss_threshold).items():
+            per_batch.setdefault(k, []).append(v)
+
+    pooled = np.concatenate(pooled)
+    point = _metrics_from_npv(pooled, loss_threshold)
+
+    out = {}
+    for k in point:
+        arr = np.asarray(per_batch[k], float)
+        se = float(arr.std(ddof=1) / np.sqrt(n_batches))
+        out[k] = {"value": point[k], "se": se, "half_width": z * se,
+                  "ci_low": point[k] - z * se, "ci_high": point[k] + z * se}
+    return {"metrics": out, "n_batches": n_batches, "total_n": int(pooled.size),
+            "confidence": confidence, "sampling": cfg.sampling}
+
+
+# ==========================================================================
 # 7. COSTO DEL CAPITALE (CAPM / WACC)
 # ==========================================================================
 def relever_beta(beta_unlevered, tax_rate, debt_equity, beta_debt=0.0):
@@ -1021,6 +1125,26 @@ if __name__ == "__main__":
                                "tv_growth", [0.00, 0.02])
     print(f"         Griglia NPV 2 vie (righe=g, col=tasso): shape={grid.shape}, "
           f"monotona nel tasso={'OK' if np.all(np.diff(grid, axis=1) < 0) else 'controllare'}")
+
+    # ---- TEST 9: LHS riduce la varianza e intervalli di confidenza ----
+    print("\n[TEST 9] Latin Hypercube + intervalli di confidenza")
+    def _se(sampling, reps=25, n=3000):
+        vals = []
+        for s in range(reps):
+            c = SimConfig(n_sim=n, seed=100 + s, enable_shift=False, tv_method="none",
+                          corr_rev_cost=0.6, persistence=0.3, sampling=sampling)
+            vals.append(run_simulations(df, c)["npv"].mean())
+        return float(np.std(vals, ddof=1))
+    se_r, se_l = _se("random"), _se("lhs")
+    print(f"         SE media: casuale={se_r:.2f} | LHS={se_l:.2f}  "
+          f"({'OK: LHS riduce la varianza' if se_l < se_r else 'controllare'})")
+    ci = estimate_with_ci(df,
+                          SimConfig(n_sim=6000, seed=42, tv_method="none", sampling="lhs"),
+                          n_batches=12)
+    m = ci["metrics"]["VaR 99% (P1)"]
+    print(f"         {ci['total_n']:,} sim: VaR 99% = {m['value']:.1f} ± {m['half_width']:.1f} "
+          f"(IC95 {m['ci_low']:.1f}..{m['ci_high']:.1f})  "
+          f"{'OK' if m['half_width'] > 0 and m['ci_low'] < m['value'] < m['ci_high'] else 'FAIL'}")
 
     print("\n" + "=" * 70)
     print("Metriche di sintesi (FCFE, con Gordon):")
