@@ -1,0 +1,403 @@
+{
+ "metadata": {
+  "source": "Aswath Damodaran, Stern NYU — beta Europe (Western Europe) dal file ufficiale; ERP: sottoinsieme paesi principali",
+  "date": "2026-01-05",
+  "vintage": "gennaio 2026",
+  "note": "Beta Europe (94 settori) dal file betaEurope.xls. ERP = paesi principali confermati; eseguire l'updater su ctryprem.xls per l'elenco ERP completo.",
+  "base_url": "https://pages.stern.nyu.edu/~adamodar/pc/datasets/"
+ },
+ "betas": {
+  "Europe": {
+   "Advertising": [
+    0.6559,
+    0.724
+   ],
+   "Aerospace/Defense": [
+    1.1834,
+    1.2427
+   ],
+   "Air Transport": [
+    0.7493,
+    0.8247
+   ],
+   "Apparel": [
+    0.7427,
+    0.7751
+   ],
+   "Auto & Truck": [
+    0.7274,
+    0.8544
+   ],
+   "Auto Parts": [
+    0.6839,
+    0.8043
+   ],
+   "Bank (Money Center)": [
+    0.3389,
+    0.4684
+   ],
+   "Banks (Regional)": [
+    0.1261,
+    0.1752
+   ],
+   "Beverage (Alcoholic)": [
+    0.4207,
+    0.432
+   ],
+   "Beverage (Soft)": [
+    0.3392,
+    0.3599
+   ],
+   "Broadcasting": [
+    0.7587,
+    0.8604
+   ],
+   "Brokerage & Investment Banking": [
+    0.4668,
+    0.5745
+   ],
+   "Building Materials": [
+    0.9066,
+    0.9374
+   ],
+   "Business & Consumer Services": [
+    0.6848,
+    0.7147
+   ],
+   "Cable TV": [
+    0.6827,
+    0.7565
+   ],
+   "Chemical (Basic)": [
+    0.4609,
+    0.502
+   ],
+   "Chemical (Diversified)": [
+    0.9975,
+    1.0403
+   ],
+   "Chemical (Specialty)": [
+    0.9715,
+    1.0127
+   ],
+   "Coal & Related Energy": [
+    0.6095,
+    0.6997
+   ],
+   "Computer Services": [
+    0.8403,
+    0.9044
+   ],
+   "Computers/Peripherals": [
+    1.0513,
+    1.1788
+   ],
+   "Construction Supplies": [
+    0.8023,
+    0.8586
+   ],
+   "Diversified": [
+    0.7918,
+    0.8501
+   ],
+   "Drugs (Biotechnology)": [
+    1.0732,
+    1.142
+   ],
+   "Drugs (Pharmaceutical)": [
+    1.0488,
+    1.0863
+   ],
+   "Education": [
+    0.4616,
+    0.4839
+   ],
+   "Electrical Equipment": [
+    1.0055,
+    1.0548
+   ],
+   "Electronics (Consumer & Office)": [
+    1.2136,
+    1.282
+   ],
+   "Electronics (General)": [
+    1.0005,
+    1.0414
+   ],
+   "Engineering/Construction": [
+    0.6784,
+    0.7981
+   ],
+   "Entertainment": [
+    0.6712,
+    0.7251
+   ],
+   "Environmental & Waste Services": [
+    0.7187,
+    0.8025
+   ],
+   "Farming/Agriculture": [
+    0.2817,
+    0.302
+   ],
+   "Financial Svcs. (Non-bank & Insurance)": [
+    0.3115,
+    0.4117
+   ],
+   "Food Processing": [
+    0.3674,
+    0.3817
+   ],
+   "Food Wholesalers": [
+    0.335,
+    0.3748
+   ],
+   "Furn/Home Furnishings": [
+    0.3449,
+    0.397
+   ],
+   "Green & Renewable Energy": [
+    0.4356,
+    0.4603
+   ],
+   "Healthcare Products": [
+    1.0991,
+    1.1287
+   ],
+   "Healthcare Support Services": [
+    0.6059,
+    0.6397
+   ],
+   "Heathcare Information and Technology": [
+    1.0402,
+    1.0818
+   ],
+   "Homebuilding": [
+    1.2527,
+    1.4154
+   ],
+   "Hospitals/Healthcare Facilities": [
+    0.287,
+    0.3031
+   ],
+   "Hotel/Gaming": [
+    0.7136,
+    0.773
+   ],
+   "Household Products": [
+    0.6918,
+    0.7113
+   ],
+   "Information Services": [
+    0.3769,
+    0.4435
+   ],
+   "Insurance (General)": [
+    0.6263,
+    0.7221
+   ],
+   "Insurance (Life)": [
+    0.4758,
+    0.6492
+   ],
+   "Insurance (Prop/Cas.)": [
+    0.4977,
+    0.5149
+   ],
+   "Investments & Asset Management": [
+    0.5139,
+    0.5854
+   ],
+   "Machinery": [
+    1.0287,
+    1.0844
+   ],
+   "Metals & Mining": [
+    0.9083,
+    0.9589
+   ],
+   "Office Equipment & Services": [
+    0.4937,
+    0.5471
+   ],
+   "Oil/Gas (Integrated)": [
+    0.3781,
+    0.406
+   ],
+   "Oil/Gas (Production and Exploration)": [
+    0.5761,
+    0.6523
+   ],
+   "Oil/Gas Distribution": [
+    0.4425,
+    0.476
+   ],
+   "Oilfield Svcs/Equip.": [
+    0.6931,
+    0.8103
+   ],
+   "Packaging & Container": [
+    0.5213,
+    0.5433
+   ],
+   "Paper/Forest Products": [
+    0.5177,
+    0.5509
+   ],
+   "Power": [
+    0.4241,
+    0.4529
+   ],
+   "Precious Metals": [
+    0.9163,
+    0.953
+   ],
+   "Publishing & Newspapers": [
+    0.4772,
+    0.5115
+   ],
+   "R.E.I.T.": [
+    0.3807,
+    0.3985
+   ],
+   "Real Estate (Development)": [
+    0.3399,
+    0.3976
+   ],
+   "Real Estate (General/Diversified)": [
+    0.3407,
+    0.3523
+   ],
+   "Real Estate (Operations & Services)": [
+    0.3209,
+    0.3354
+   ],
+   "Recreation": [
+    0.8498,
+    0.8928
+   ],
+   "Reinsurance": [
+    1.0558,
+    1.139
+   ],
+   "Restaurant/Dining": [
+    0.5495,
+    0.5891
+   ],
+   "Retail (Automotive)": [
+    0.8064,
+    0.8741
+   ],
+   "Retail (Building Supply)": [
+    0.8209,
+    0.8785
+   ],
+   "Retail (Distributors)": [
+    0.6197,
+    0.6446
+   ],
+   "Retail (General)": [
+    0.7933,
+    0.8859
+   ],
+   "Retail (Grocery and Food)": [
+    0.6999,
+    0.7497
+   ],
+   "Retail (REITs)": [
+    0.3307,
+    0.3556
+   ],
+   "Retail (Special Lines)": [
+    1.0075,
+    1.06
+   ],
+   "Rubber& Tires": [
+    0.5849,
+    0.6453
+   ],
+   "Semiconductor": [
+    1.1525,
+    1.2165
+   ],
+   "Semiconductor Equip": [
+    1.6579,
+    1.6929
+   ],
+   "Shipbuilding & Marine": [
+    0.6548,
+    0.7402
+   ],
+   "Shoe": [
+    1.0351,
+    1.1011
+   ],
+   "Software (Entertainment)": [
+    0.9972,
+    1.0244
+   ],
+   "Software (Internet)": [
+    0.6176,
+    0.6311
+   ],
+   "Software (System & Application)": [
+    0.911,
+    0.9636
+   ],
+   "Steel": [
+    0.6924,
+    0.8549
+   ],
+   "Telecom (Wireless)": [
+    0.3426,
+    0.3731
+   ],
+   "Telecom. Equipment": [
+    0.6677,
+    0.7601
+   ],
+   "Telecom. Services": [
+    0.4311,
+    0.4469
+   ],
+   "Tobacco": [
+    0.1471,
+    0.1531
+   ],
+   "Transportation": [
+    0.4923,
+    0.5352
+   ],
+   "Transportation (Railroads)": [
+    0.5062,
+    0.6011
+   ],
+   "Trucking": [
+    0.6095,
+    0.6536
+   ],
+   "Utility (General)": [
+    0.3765,
+    0.4115
+   ],
+   "Utility (Water)": [
+    0.4275,
+    0.4643
+   ]
+  }
+ },
+ "erp": {
+  "Mature market (base)": 4.33,
+  "United States": 4.5,
+  "Germany": 4.33,
+  "Netherlands": 4.33,
+  "Switzerland": 4.33,
+  "Austria": 4.86,
+  "Belgium": 5.13,
+  "Italy": 6.7,
+  "Spain": 5.8,
+  "Portugal": 5.8,
+  "Greece": 7.1,
+  "Australia": 4.33
+ }
+}
