@@ -82,7 +82,7 @@ def _dist_spec(factor_label, key):
 # HEADER
 # ==========================================================================
 st.markdown("""
-<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>NPV @Risk Simulation Tool by ERM</h1>
+<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>DCF Tool/h1>
 <p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>Simula scenari finanziari e analizza i progetti di investimento con DCF</p>
 """, unsafe_allow_html=True)
 
