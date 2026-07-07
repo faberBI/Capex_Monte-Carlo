@@ -21,6 +21,12 @@ import streamlit as st
 
 import dcf_core as core
 
+try:
+    import damodaran_data
+    _HAS_DAMODARAN = True
+except Exception:
+    _HAS_DAMODARAN = False
+
 # I grafici restano i tuoi: nessuna modifica alle firme di capex.visuals
 from capex.visuals import (
     plot_npv_distribution,
@@ -157,11 +163,43 @@ if st.session_state.logged_in:
             with st.expander("💠 Costo del capitale (CAPM / WACC)", expanded=True):
                 st.caption("Ke si calcola SEMPRE col CAPM. Il WACC lo usa come input: serve "
                            "solo in FCFF con debito (senza debito il WACC coincide col Ke).")
+
+                dd_data = damodaran_data.load() if _HAS_DAMODARAN else None
+                if dd_data is not None:
+                    if dd_data.meta.get("is_snapshot"):
+                        st.warning(
+                            f"Dati Damodaran: snapshot incorporato ({dd_data.meta['date']}). "
+                            "Gli ERP sono valori reali; i beta di settore sono INDICATIVI e "
+                            "limitati. Esegui `python damodaran_update.py` per scaricare la "
+                            "tabella settoriale ufficiale e completa."
+                        )
+                    else:
+                        st.info(f"Dati Damodaran scaricati · {dd_data.meta['date']} · "
+                                f"{dd_data.meta['source']}")
+
                 listed = st.checkbox("Impresa quotata (beta di mercato disponibile)", value=False)
+
+                # --- Risk-free: sempre manuale ---
                 rf = st.number_input("Risk-free Rf (es. 0.03)", value=0.03,
-                                     step=0.005, format="%.4f")
-                erp = st.number_input("Equity Risk Premium ERP (mercato + country)",
-                                      value=0.06, step=0.005, format="%.4f")
+                                     step=0.005, format="%.4f",
+                                     help="Tasso di mercato maturo (es. Bund tedesco per l'area "
+                                          "euro). L'ERP sotto include già il rischio-paese.")
+
+                # --- ERP: auto da paese (se disponibile), sempre modificabile ---
+                if dd_data is not None and dd_data.list_countries():
+                    countries = dd_data.list_countries()
+                    idx_c = countries.index("Italy") if "Italy" in countries else 0
+                    country = st.selectbox("Paese (ERP totale, Damodaran)", countries, index=idx_c)
+                    erp_val, erp_src, erp_date = dd_data.get_erp(country)
+                    erp = st.number_input("Equity Risk Premium ERP (mercato + country)",
+                                          value=float(erp_val) / 100.0 if erp_val else 0.06,
+                                          step=0.005, format="%.4f")
+                    st.caption(f"ERP auto da {erp_src} ({erp_date}); modificabile. Somma già il "
+                               "rischio-paese: non aggiungerlo una seconda volta via Rf.")
+                else:
+                    erp = st.number_input("Equity Risk Premium ERP (mercato + country)",
+                                          value=0.06, step=0.005, format="%.4f")
+
                 de_target = st.number_input("D/E target (0 = nessun debito)", value=0.0,
                                             min_value=0.0, step=0.1, format="%.3f")
                 kd = st.number_input("Costo del debito Kd (ante imposte)", value=0.05,
@@ -170,17 +208,35 @@ if st.session_state.logged_in:
                                             step=0.05, format="%.3f")
                 extra_prem = st.number_input("Premi aggiuntivi (size / specific)", value=0.0,
                                              step=0.005, format="%.4f")
+
+                # --- Beta ---
                 if listed:
                     beta_L_in = st.number_input("Beta levered osservato (mercato)",
                                                 value=1.0, step=0.05, format="%.3f")
                     beta_U_in = None
+                elif dd_data is not None and dd_data.list_regions():
+                    regions = dd_data.list_regions()
+                    idx_r = regions.index("Europe") if "Europe" in regions else 0
+                    region = st.selectbox("Regione (Damodaran)", regions, index=idx_r)
+                    sectors = dd_data.list_sectors(region)
+                    sector = st.selectbox("Settore (Damodaran)", sectors) if sectors else None
+                    cash_adj = st.checkbox("Beta corretto per la cassa", value=True)
+                    if sector:
+                        bU_val, bU_src, bU_date = dd_data.get_unlevered_beta(region, sector, cash_adj)
+                    else:
+                        bU_val, bU_src, bU_date = 0.75, "default", ""
+                    beta_U_in = st.number_input("Beta unlevered di settore (auto, modificabile)",
+                                                value=float(bU_val) if bU_val else 0.75,
+                                                step=0.05, format="%.3f")
+                    st.caption(f"β_U auto da {bU_src} ({bU_date}); poi rilevraggiato alla tua D/E.")
+                    beta_L_in = None
                 else:
-                    st.caption("Beta unlevered di settore da Damodaran (aggiornato a gennaio; "
-                               "usa la colonna 'unlevered beta', meglio se corretta per la cassa). "
-                               "Fonte: pages.stern.nyu.edu/~adamodar → Betas by Sector.")
+                    st.caption("Beta unlevered di settore da Damodaran (colonna 'unlevered beta', "
+                               "meglio corretta per la cassa). Fonte: pages.stern.nyu.edu/~adamodar.")
                     beta_U_in = st.number_input("Beta unlevered di settore (Damodaran)",
                                                 value=0.75, step=0.05, format="%.3f")
                     beta_L_in = None
+
                 coc = core.cost_of_capital(
                     framework=framework_code, rf=float(rf), erp=float(erp),
                     tax_rate=float(tax_rate), debt_equity=float(de_target),
