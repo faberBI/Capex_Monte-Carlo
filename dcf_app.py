@@ -197,6 +197,11 @@ if st.session_state.logged_in:
         n_sim = st.number_input("Numero simulazioni", min_value=100, max_value=200000,
                                 value=2000, step=100)
         seed = st.number_input("Seed (0=random)", value=0)
+        sampling_choice = st.radio("Campionamento", ["Latin Hypercube", "Monte Carlo casuale"],
+                                   index=0, horizontal=True,
+                                   help="Latin Hypercube stratifica le estrazioni: stesse "
+                                        "simulazioni, stime meno rumorose (code più affidabili).")
+        sampling = "lhs" if sampling_choice.startswith("Latin") else "random"
 
         # ---- CORRELAZIONE ----
         with st.expander("📈 Correlazione (Monte Carlo)", expanded=False):
@@ -249,6 +254,16 @@ if st.session_state.logged_in:
             st.caption("Gordon usa il flusso dell'ultimo anno come stato stazionario: "
                        "se lo shift è attivo, valuta di normalizzarlo o disattivare lo shift.")
 
+        # ---- AFFIDABILITÀ ----
+        with st.expander("📏 Affidabilità (intervalli di confidenza)", expanded=False):
+            st.caption("Calcola l'errore standard e l'IC 95% delle metriche chiave con il "
+                       "metodo della replicazione (più batch indipendenti). Aggiunge tempo "
+                       "di calcolo ma dà una barra d'errore onesta ai numeri.")
+            compute_ci = st.checkbox("Calcola intervalli di confidenza", value=False)
+            n_batches = st.slider("Numero di batch", 5, 40, 20, 1,
+                                  help="Più batch = errore standard più stabile. "
+                                       "Simulazioni totali = batch × n° simulazioni.")
+
         run_button = st.button("Esegui simulazione")
 
     tv_method = {"Nessuno": "none", "Gordon (perpetuità)": "gordon",
@@ -287,6 +302,7 @@ if st.session_state.logged_in:
             dist_disposal=spec_disp,
             copula=copula,
             copula_df=float(copula_df),
+            sampling=sampling,
         )
 
         with st.spinner("Simulazione in corso..."):
@@ -514,6 +530,57 @@ if st.session_state.logged_in:
             axh.set_title(f"NPV al variare di {x_lbl} × {y_lbl}")
             st.pyplot(figh)
             st.caption("NPV deterministico (fattori al 'piano') sulla griglia delle due ipotesi.")
+
+        # ============================================================
+        # AFFIDABILITÀ DELLE STIME (intervalli di confidenza)
+        # ============================================================
+        reliability = None
+        if compute_ci:
+            st.header("📏 Affidabilità delle stime")
+            with st.spinner(f"Calcolo intervalli di confidenza su {int(n_batches)} batch..."):
+                reliability = core.estimate_with_ci(df, cfg, n_batches=int(n_batches))
+            rel_rows = []
+            for k, m in reliability["metrics"].items():
+                if k == "P(NPV<0)":
+                    rel_rows.append({"Metrica": k, "Stima": f"{m['value']:.1%}",
+                                     "± (IC 95%)": f"±{m['half_width']*100:.1f} pp",
+                                     "Intervallo 95%": f"{m['ci_low']:.1%} … {m['ci_high']:.1%}"})
+                else:
+                    rel_rows.append({"Metrica": k, "Stima": f"{m['value']:,.1f}",
+                                     "± (IC 95%)": f"±{m['half_width']:,.1f}",
+                                     "Intervallo 95%": f"{m['ci_low']:,.1f} … {m['ci_high']:,.1f}"})
+            st.table(pd.DataFrame(rel_rows).set_index("Metrica"))
+            st.caption(
+                f"Metodo della replicazione: {reliability['n_batches']} batch indipendenti, "
+                f"{reliability['total_n']:,} simulazioni totali, campionamento "
+                f"{'Latin Hypercube' if reliability['sampling']=='lhs' else 'Monte Carlo casuale'}. "
+                "L'errore standard è la deviazione tra i batch — valido anche con LHS, dove "
+                "std/√n non si applica. Con LHS la barra d'errore si stringe."
+            )
+
+        # ============================================================
+        # REPORT WORD (comitato)
+        # ============================================================
+        st.header("📄 Report per il comitato")
+        st.caption("Genera un documento Word con sintesi esecutiva, risultati (con IC se "
+                   "calcolati), distribuzione dell'NPV, driver, tornado, DSCR, ipotesi e "
+                   "nota metodologica.")
+        try:
+            import dcf_report
+            doc_buf = BytesIO()
+            dcf_report.build_report(df, cfg, res, doc_buf, project_name=project_name,
+                                    reliability=reliability)
+            st.download_button(
+                "⬇️ Scarica report Word",
+                data=doc_buf.getvalue(),
+                file_name=f"report_{project_name.replace(' ', '_')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            if reliability is None:
+                st.caption("Suggerimento: attiva gli intervalli di confidenza per includerli "
+                           "anche nel report.")
+        except Exception as e:
+            st.warning(f"Report Word non disponibile: {e}")
 
         # ------------------------- EXPORT EXCEL -------------------------
         output = BytesIO()
