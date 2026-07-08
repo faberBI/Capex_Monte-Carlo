@@ -82,7 +82,7 @@ def _dist_spec(factor_label, key):
 # HEADER
 # ==========================================================================
 st.markdown("""
-<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>DCF Tool h1>
+<h1 style='color: white; font-weight: 800; font-family: Arial, sans-serif;'>NPV @Risk Simulation Tool by ERM</h1>
 <p style='color: #cccccc; font-size: 18px; font-family: Arial, sans-serif;'>Simula scenari finanziari e analizza i progetti di investimento con DCF</p>
 """, unsafe_allow_html=True)
 
@@ -288,6 +288,45 @@ if st.session_state.logged_in:
             spec_cost = _dist_spec("Costi variabili", "cost")
             spec_disp = _dist_spec("Disposal", "disp")
 
+            st.markdown("**Costo dell'investimento (capex)**")
+            capex_overrun_enable = st.checkbox(
+                "Sovracosto capex stocastico", value=False,
+                help="Moltiplicatore sul capex (1,20 = +20%). Il debito resta al piano base: "
+                     "il sovracosto lo assorbe l'equity (FCFE più negativo).")
+            if capex_overrun_enable:
+                cx1, cx2, cx3 = st.columns(3)
+                cx_min = cx1.number_input("min ×", value=0.95, step=0.05, format="%.2f", key="cxmn")
+                cx_mode = cx2.number_input("piano ×", value=1.00, step=0.05, format="%.2f", key="cxmd")
+                cx_max = cx3.number_input("max ×", value=1.30, step=0.05, format="%.2f", key="cxmx")
+                spec_capex = _dist_spec("Sovracosto capex", "capex")
+            else:
+                cx_min, cx_mode, cx_max, spec_capex = 0.95, 1.0, 1.30, {"dist": "pert"}
+
+        # ---- PIANO DI FINANZIAMENTO ----
+        with st.expander("🏦 Piano di finanziamento (equity / senior debt)", expanded=False):
+            st.caption("Se attivo, DERIVA il tiraggio di senior debt e l'iniezione di equity dal "
+                       "cronoprogramma di capex, ignorando le colonne di debito dell'Excel. "
+                       "Rilevante per l'FCFE. Il debito è dimensionato sul caso base; i sovracosti "
+                       "di capex li assorbe l'equity.")
+            funding_derived = st.checkbox("Deriva il finanziamento dal piano", value=False)
+            gearing = st.slider("Gearing (quota senior debt sul fabbisogno)", 0.0, 1.0, 0.70, 0.05)
+            draw_method_label = st.radio(
+                "Metodo di tiraggio", ["Pari passu", "Equity prima", "Debito prima"], index=0,
+                help="Pari passu: equity e debito proporzionali ogni anno. Equity prima: si "
+                     "esaurisce l'equity, poi il debito (viceversa 'Debito prima').")
+            idc_label = st.radio("Interessi in costruzione (IDC)",
+                                 ["Capitalizzati sul debito", "Pagati per cassa", "Nessuno"], index=0)
+            funding_rate = st.number_input("Tasso senior debt", value=0.05, step=0.005, format="%.4f")
+            repay_years = st.slider("Tenor ammortamento (anni dopo l'entrata in esercizio)", 1, 30, 10, 1)
+            repay_profile_label = st.radio("Profilo di rimborso", ["Lineare", "Annualità"], index=0)
+            grace_years = st.slider("Preammortamento (anni, solo interessi)", 0, 5, 0, 1)
+        funding_mode = "derived" if funding_derived else "manual"
+        draw_method = {"Pari passu": "pari_passu", "Equity prima": "equity_first",
+                       "Debito prima": "debt_first"}[draw_method_label]
+        idc_mode = {"Capitalizzati sul debito": "capitalize", "Pagati per cassa": "cash",
+                    "Nessuno": "none"}[idc_label]
+        repay_profile = {"Lineare": "linear", "Annualità": "annuity"}[repay_profile_label]
+
         # ---- SHIFT ----
         enable_shift = st.checkbox("Abilita shift temporale", value=True)
         with st.expander("⏱️ Shift temporale (ritardo di progetto)", expanded=False):
@@ -359,6 +398,17 @@ if st.session_state.logged_in:
             copula=copula,
             copula_df=float(copula_df),
             sampling=sampling,
+            capex_overrun_enable=bool(capex_overrun_enable),
+            capex_overrun={"min": float(cx_min), "mode": float(cx_mode), "max": float(cx_max)},
+            dist_capex=spec_capex,
+            funding_mode=funding_mode,
+            gearing=float(gearing),
+            draw_method=draw_method,
+            idc_mode=idc_mode,
+            funding_rate=float(funding_rate),
+            repay_years=int(repay_years),
+            repay_profile=repay_profile,
+            grace_years=int(grace_years),
         )
 
         with st.spinner("Simulazione in corso..."):
@@ -406,6 +456,41 @@ if st.session_state.logged_in:
         c1.metric("Expected NPV", f"{expected_npv:,.2f}")
         c2.metric("VaR 95% (CaR)", f"{percentile_5:,.2f}")
         c3.metric("Probabilità NPV<0", f"{downside_prob*100:.2f}%")
+
+        # ------------------------- PIANO DI FINANZIAMENTO -------------------------
+        fund = res.get("funding")
+        if fund is not None:
+            st.subheader("🏦 Piano di finanziamento (equity / senior debt)")
+            years_lbl = [str(int(y)) for y in res["years_col"]]
+            eq = res["equity_injection"]
+            dd = fund["debt_inflow"]
+            rp = fund["debt_repayment"]
+            plan_df = pd.DataFrame({
+                "Anno": years_lbl,
+                "Drawdown senior debt": np.round(dd, 1),
+                "Iniezione equity": np.round(eq, 1),
+                "Rimborso debito": np.round(rp, 1),
+            }).set_index("Anno")
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            fc1.metric("Fabbisogno costruzione", f"{fund['total_need']:,.0f}")
+            fc2.metric("Senior debt (su capex)", f"{fund['debt_capex']:,.0f}",
+                       f"gearing {fund['gearing_capex']:.0%}")
+            fc3.metric("Equity", f"{fund['total_equity']:,.0f}")
+            fc4.metric("Debito a COD", f"{fund['debt_at_cod']:,.0f}",
+                       f"IDC {fund['idc_total']:,.1f}")
+            figf, axf = plt.subplots(figsize=(10, 3))
+            x = np.arange(len(years_lbl))
+            axf.bar(x - 0.2, dd, width=0.4, label="Senior debt (drawdown)", color="#4C78A8")
+            axf.bar(x + 0.2, eq, width=0.4, label="Equity", color="#2E7D32")
+            axf.plot(x, rp, "o-", color="#C62828", label="Rimborso debito", linewidth=1)
+            axf.set_xticks(x); axf.set_xticklabels(years_lbl)
+            axf.set_ylabel("Fonti / rimborsi"); axf.legend(fontsize=8); axf.grid(True, alpha=0.25)
+            axf.set_title("Tiraggio delle fonti per anno di realizzazione")
+            st.pyplot(figf)
+            st.table(plan_df)
+            st.caption("Il senior debt è dimensionato sul caso base; eventuali sovracosti di "
+                       "capex sono a carico dell'equity. Con questo piano attivo, le colonne "
+                       "'Debt inflow'/'Debt repayment' dell'Excel vengono ignorate.")
 
         # ------------------------- DSCR -------------------------
         st.subheader("Analisi del credito (DSCR)")
