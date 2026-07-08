@@ -299,6 +299,30 @@ def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
             "del debito sul totale di interessi e quota capitale (definizione bancaria)."
         ).runs[0].font.size = Pt(8.5)
 
+    # --- piano di finanziamento ---
+    fund = res.get("funding")
+    if fund is not None:
+        _heading(doc, "Piano di finanziamento (equity / senior debt)", 1)
+        rows = [
+            ["Fabbisogno di costruzione", _fmt(fund["total_need"], currency)],
+            ["Senior debt (su capex)", f"{_fmt(fund['debt_capex'], currency)}  (gearing {fund['gearing_capex']:.0%})"],
+            ["Interessi in costruzione (IDC)", _fmt(fund["idc_total"], currency)],
+            ["Debito a fine costruzione (COD)", _fmt(fund["debt_at_cod"], currency)],
+            ["Equity", _fmt(fund["total_equity"], currency)],
+        ]
+        _table(doc, ["Voce", "Valore"], rows, col_widths=[3.4, 2.4])
+        eq = res.get("equity_injection")
+        years_lbl = [str(int(y)) for y in res["years_col"]]
+        srows = [[years_lbl[i], _fmt(fund["debt_inflow"][i], currency),
+                  _fmt(eq[i] if eq is not None else 0.0, currency),
+                  _fmt(fund["debt_repayment"][i], currency)] for i in range(len(years_lbl))]
+        _table(doc, ["Anno", "Drawdown debito", "Equity", "Rimborso debito"], srows,
+               col_widths=[1.2, 1.9, 1.6, 1.7])
+        doc.add_paragraph(
+            "Tiraggio derivato dal cronoprogramma di capex. Il senior debt e' dimensionato sul "
+            "caso base; i sovracosti di capex sono a carico dell'equity."
+        ).runs[0].font.size = Pt(8.5)
+
     # --- ipotesi e parametri ---
     doc.add_page_break()
     _heading(doc, "Ipotesi e parametri", 1)
