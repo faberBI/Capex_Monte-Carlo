@@ -12,6 +12,7 @@ Requisiti: streamlit, pandas, numpy, scipy, numpy_financial, matplotlib, plotly,
 
 import json
 import hashlib
+import os
 from io import BytesIO
 
 import numpy as np
@@ -722,24 +723,42 @@ if st.session_state.logged_in:
         # ============================================================
         # SINTESI AI (a schermo) + REPORT WORD
         # ============================================================
+        def _llm_key(provider):
+            """Chiave API: prima st.secrets (Streamlit Cloud), poi variabile d'ambiente."""
+            name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+            try:
+                if name in st.secrets:
+                    return st.secrets[name]
+            except Exception:
+                pass
+            return os.environ.get(name)
+
         ai_text = None
+        llm_key = _llm_key(llm_provider_code) if ai_commentary else None
         if ai_commentary:
             st.header("🧠 Sintesi e discussione (AI)")
-            with st.spinner("Generazione della sintesi AI..."):
-                try:
-                    import llm_commentary
-                    ai_text = llm_commentary.generate_investment_commentary(
-                        res, cfg, df, reliability=reliability, model=llm_model,
-                        provider=llm_provider_code, project_description=project_description)
-                except Exception:
-                    ai_text = None
-            if ai_text:
-                st.markdown(ai_text)
-                st.caption("Scritta da un LLM sui numeri del modello; le tabelle e i grafici "
-                           "restano deterministici. Supporto alla decisione, non consulenza.")
-            else:
-                st.info("Sintesi AI non disponibile (chiave API assente o errore). "
+            if not llm_key:
+                st.info(f"Chiave API non trovata. Imposta "
+                        f"{'ANTHROPIC_API_KEY' if llm_provider_code == 'anthropic' else 'OPENAI_API_KEY'} "
+                        "nei secrets dell'app (Streamlit Cloud → Manage app → Settings → Secrets). "
                         "Il report userà il testo standard.")
+            else:
+                with st.spinner("Generazione della sintesi AI..."):
+                    try:
+                        import llm_commentary
+                        ai_text = llm_commentary.generate_investment_commentary(
+                            res, cfg, df, reliability=reliability, model=llm_model,
+                            provider=llm_provider_code, project_description=project_description,
+                            api_key=llm_key)
+                    except Exception:
+                        ai_text = None
+                if ai_text:
+                    st.markdown(ai_text)
+                    st.caption("Scritta da un LLM sui numeri del modello; le tabelle e i grafici "
+                               "restano deterministici. Supporto alla decisione, non consulenza.")
+                else:
+                    st.info("Sintesi AI non disponibile (errore dell'API o del modello). "
+                            "Il report userà il testo standard.")
 
         st.header("📄 Report per il comitato")
         st.caption("Genera un documento Word con sintesi (AI se attiva), risultati (con IC se "
@@ -751,7 +770,8 @@ if st.session_state.logged_in:
             dcf_report.build_report(df, cfg, res, doc_buf, project_name=project_name,
                                     reliability=reliability, ai_commentary=bool(ai_commentary),
                                     llm_model=llm_model, llm_provider=llm_provider_code,
-                                    project_description=project_description)
+                                    project_description=project_description,
+                                    commentary_text=ai_text, api_key=llm_key)
             st.download_button(
                 "⬇️ Scarica report Word",
                 data=doc_buf.getvalue(),
