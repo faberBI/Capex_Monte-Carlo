@@ -127,7 +127,7 @@ else:
 # APP
 # ==========================================================================
 if st.session_state.logged_in:
-    st.title("NPV @Risk Simulation Tool by ERM")
+    st.title("NPV @Risk Simulation Tool")
 
     uploaded_file = st.file_uploader("Carica file Excel", type=["xlsx", "xls"])
 
