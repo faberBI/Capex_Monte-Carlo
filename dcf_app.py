@@ -133,6 +133,11 @@ if st.session_state.logged_in:
     with st.sidebar:
         st.header("Parametri simulazione")
         project_name = st.text_input("Nome progetto", value="Progetto 1")
+        project_description = st.text_area(
+            "Descrizione del progetto (per il report)", value="", height=120,
+            help="Testo libero: cos'è il progetto/investimento. Se attivi la sintesi AI, "
+                 "viene usato per la sezione descrittiva (senza inventare oltre il testo). "
+                 "Senza AI, viene inserito così com'è nel report.")
 
         # ---- FRAMEWORK: risolve l'ambiguita' del tasso di sconto ----
         framework = st.radio(
@@ -358,6 +363,21 @@ if st.session_state.logged_in:
             n_batches = st.slider("Numero di batch", 5, 40, 20, 1,
                                   help="Più batch = errore standard più stabile. "
                                        "Simulazioni totali = batch × n° simulazioni.")
+
+        # ---- SINTESI AI ----
+        with st.expander("🧠 Sintesi AI (opzionale)", expanded=False):
+            st.caption("La sintesi e la discussione dei risultati vengono scritte da un LLM, "
+                       "a partire SOLO dai numeri calcolati (le tabelle e i grafici restano "
+                       "deterministici). Serve la chiave API impostata nell'ambiente. "
+                       "Se non disponibile, il report usa il testo standard.")
+            ai_commentary = st.checkbox("Genera sintesi AI (report + a schermo)", value=False)
+            llm_provider = st.radio("Provider", ["OpenAI", "Anthropic (Claude)"], index=0,
+                                    horizontal=True)
+            if llm_provider == "OpenAI":
+                llm_model = st.selectbox("Modello", ["gpt-4o", "gpt-4o-mini", "gpt-4"], index=0)
+            else:
+                llm_model = st.selectbox("Modello", ["claude-sonnet-4-5", "claude-opus-4-1"], index=0)
+        llm_provider_code = "anthropic" if llm_provider.startswith("Anthropic") else "openai"
 
         run_button = st.button("Esegui simulazione")
 
@@ -700,17 +720,38 @@ if st.session_state.logged_in:
             )
 
         # ============================================================
-        # REPORT WORD (comitato)
+        # SINTESI AI (a schermo) + REPORT WORD
         # ============================================================
+        ai_text = None
+        if ai_commentary:
+            st.header("🧠 Sintesi e discussione (AI)")
+            with st.spinner("Generazione della sintesi AI..."):
+                try:
+                    import llm_commentary
+                    ai_text = llm_commentary.generate_investment_commentary(
+                        res, cfg, df, reliability=reliability, model=llm_model,
+                        provider=llm_provider_code, project_description=project_description)
+                except Exception:
+                    ai_text = None
+            if ai_text:
+                st.markdown(ai_text)
+                st.caption("Scritta da un LLM sui numeri del modello; le tabelle e i grafici "
+                           "restano deterministici. Supporto alla decisione, non consulenza.")
+            else:
+                st.info("Sintesi AI non disponibile (chiave API assente o errore). "
+                        "Il report userà il testo standard.")
+
         st.header("📄 Report per il comitato")
-        st.caption("Genera un documento Word con sintesi esecutiva, risultati (con IC se "
-                   "calcolati), distribuzione dell'NPV, driver, tornado, DSCR, ipotesi e "
-                   "nota metodologica.")
+        st.caption("Genera un documento Word con sintesi (AI se attiva), risultati (con IC se "
+                   "calcolati), distribuzione dell'NPV, driver, tornado, DSCR, piano di "
+                   "finanziamento, ipotesi e nota metodologica.")
         try:
             import dcf_report
             doc_buf = BytesIO()
             dcf_report.build_report(df, cfg, res, doc_buf, project_name=project_name,
-                                    reliability=reliability)
+                                    reliability=reliability, ai_commentary=bool(ai_commentary),
+                                    llm_model=llm_model, llm_provider=llm_provider_code,
+                                    project_description=project_description)
             st.download_button(
                 "⬇️ Scarica report Word",
                 data=doc_buf.getvalue(),
