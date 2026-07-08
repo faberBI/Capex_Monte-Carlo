@@ -111,6 +111,31 @@ def _fmt(x, currency="€", dec=0):
     return f"{currency}{x:,.{dec}f}"
 
 
+def _add_markdown_block(doc, text):
+    """Inserisce testo markdown (dall'LLM) come paragrafi Word: gestisce titoli (#, ##, ###),
+    elenchi puntati (-, *, •) e grassetto inline (**...**)."""
+    import re
+    for raw in text.split("\n"):
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if line.startswith("### "):
+            _heading(doc, line[4:].strip(), 2); continue
+        if line.startswith("## "):
+            _heading(doc, line[3:].strip(), 1); continue
+        if line.startswith("# "):
+            _heading(doc, line[2:].strip(), 1); continue
+        bullet = bool(re.match(r"^\s*[-*•]\s+", line))
+        content = re.sub(r"^\s*[-*•]\s+", "", line) if bullet else line
+        p = doc.add_paragraph(style="List Bullet") if bullet else doc.add_paragraph()
+        for part in re.split(r"(\*\*.+?\*\*)", content):
+            if not part:
+                continue
+            run = p.add_run(part[2:-2] if (part.startswith("**") and part.endswith("**")) else part)
+            run.bold = part.startswith("**") and part.endswith("**")
+            run.font.size = Pt(10)
+
+
 # ==========================================================================
 # grafici (self-contained, non dipendono da capex.visuals)
 # ==========================================================================
@@ -161,10 +186,15 @@ def _chart_tornado(tor, currency):
 # costruzione report
 # ==========================================================================
 def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
-                 reliability=None, author="Conflux", subtitle=None):
+                 reliability=None, author="Conflux", subtitle=None,
+                 ai_commentary=False, llm_model="gpt-4o", llm_provider="openai",
+                 project_description=""):
     """Costruisce il report Word e lo salva su `out` (path o file-like).
     reliability: output di core.estimate_with_ci (opzionale). Se presente, i risultati
-    principali mostrano gli intervalli di confidenza."""
+    principali mostrano gli intervalli di confidenza.
+    ai_commentary: se True, la sintesi e la discussione sono scritte da un LLM (GROUNDED
+    sui numeri); se l'LLM non e' disponibile si usa automaticamente il testo template.
+    Le tabelle e i grafici restano SEMPRE deterministici (calcolati dal motore)."""
     npv = np.asarray(res["npv"], float)
     doc = Document()
 
@@ -200,25 +230,50 @@ def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
     dscr_min = float(np.nanmin(dscr)) if has_debt else None
     dscr_mean = float(np.nanmean(dscr)) if has_debt else None
 
-    # --- sintesi esecutiva ---
-    _heading(doc, "Sintesi esecutiva", 1)
-    verdict = ("valore atteso positivo" if mean > 0 else "valore atteso negativo")
-    risk_txt = (f"con una probabilita' di NPV negativo del {p_loss:.0%}")
-    p = doc.add_paragraph()
-    p.add_run(
-        f"Su {int(reliability['total_n']) if reliability else cfg.n_sim:,} simulazioni, "
-        f"il progetto «{project_name}» mostra un {verdict} pari a {_fmt(mean, currency)} "
-        f"({risk_txt}). La perdita nello scenario sfavorevole (VaR 95%) e' "
-        f"{_fmt(p5, currency)}; nello scenario estremo (VaR 99%) e' {_fmt(p1, currency)}."
-    )
-    if has_debt:
-        p.add_run(f" La copertura del servizio del debito (DSCR) minima e' {dscr_min:.2f} "
-                  f"(media {dscr_mean:.2f}, giudizio {core.dscr_rating(dscr_min).split(' ')[-1]}).")
-    doc.add_paragraph(
-        "I risultati incorporano correlazione tra i fattori, dipendenza di coda (copula t "
-        "quando selezionata), distribuzioni per fattore e attualizzazione coerente col "
-        "framework. Le stime sono accompagnate dal relativo intervallo di confidenza.",
-    ).runs[0].font.size = Pt(9.5)
+    # --- sintesi esecutiva (LLM se richiesto e disponibile, altrimenti template) ---
+    commentary = None
+    if ai_commentary:
+        try:
+            import llm_commentary
+            commentary = llm_commentary.generate_investment_commentary(
+                res, cfg, df, reliability=reliability, currency=currency,
+                model=llm_model, provider=llm_provider, project_description=project_description)
+        except Exception:
+            commentary = None
+
+    if commentary:
+        _add_markdown_block(doc, commentary)
+        note = doc.add_paragraph()
+        rnote = note.add_run("Descrizione, sintesi e commento generati da un modello "
+                             "linguistico a partire dalla descrizione fornita e dai risultati "
+                             "numerici del modello; le tabelle e i grafici che seguono sono "
+                             "calcolati dal motore.")
+        rnote.italic = True; rnote.font.size = Pt(8); rnote.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    else:
+        # descrizione del progetto (testo grezzo) se fornita
+        if project_description and str(project_description).strip():
+            _heading(doc, "Descrizione del progetto", 1)
+            for para_txt in str(project_description).strip().split("\n"):
+                if para_txt.strip():
+                    pr = doc.add_paragraph().add_run(para_txt.strip()); pr.font.size = Pt(10)
+        _heading(doc, "Sintesi esecutiva", 1)
+        verdict = ("valore atteso positivo" if mean > 0 else "valore atteso negativo")
+        risk_txt = (f"con una probabilita' di NPV negativo del {p_loss:.0%}")
+        p = doc.add_paragraph()
+        p.add_run(
+            f"Su {int(reliability['total_n']) if reliability else cfg.n_sim:,} simulazioni, "
+            f"il progetto «{project_name}» mostra un {verdict} pari a {_fmt(mean, currency)} "
+            f"({risk_txt}). La perdita nello scenario sfavorevole (VaR 95%) e' "
+            f"{_fmt(p5, currency)}; nello scenario estremo (VaR 99%) e' {_fmt(p1, currency)}."
+        )
+        if has_debt:
+            p.add_run(f" La copertura del servizio del debito (DSCR) minima e' {dscr_min:.2f} "
+                      f"(media {dscr_mean:.2f}, giudizio {core.dscr_rating(dscr_min).split(' ')[-1]}).")
+        doc.add_paragraph(
+            "I risultati incorporano correlazione tra i fattori, dipendenza di coda (copula t "
+            "quando selezionata), distribuzioni per fattore e attualizzazione coerente col "
+            "framework. Le stime sono accompagnate dal relativo intervallo di confidenza.",
+        ).runs[0].font.size = Pt(9.5)
 
     # --- risultati principali ---
     _heading(doc, "Risultati principali", 1)
@@ -356,23 +411,40 @@ def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
     ]
     _table(doc, ["Parametro", "Valore"], rows, col_widths=[3.0, 3.0])
 
-    # --- nota metodologica ---
+    # --- nota metodologica (FISSA: identica su ogni report, descrive il modello) ---
     _heading(doc, "Nota metodologica", 1)
+    doc.add_paragraph(
+        "Questa sezione descrive il modello ed e' identica in ogni report."
+    ).runs[0].font.size = Pt(9)
     notes = [
+        "Modello: valutazione DCF con simulazione Monte Carlo. Per ogni simulazione si "
+        "costruisce il conto economico e i flussi di cassa anno per anno e se ne calcola il "
+        "valore attuale netto (NPV); la distribuzione dell'NPV sintetizza il rischio del progetto.",
         "Framework: FCFF si attualizza al WACC con imposte sull'EBIT; FCFE si attualizza al "
         "costo dell'equity (Ke) e include il servizio del debito e lo scudo fiscale sugli interessi.",
+        "Fattori di rischio: ricavi, costi variabili, disposal ed eventuale sovracosto di capex "
+        "sono estratti da distribuzioni scelte per fattore (triangolare, PERT, normale, lognormale, "
+        "uniforme o empirica) a partire dalle stime min/piano/max. La lognormale adatta min e max "
+        "come 5o e 95o percentile della magnitudo (segno preservato); la normale centra sul valore "
+        "'piano' e ignora l'asimmetria.",
         "Correlazione e code: i fattori sono legati da una copula (gaussiana o t di Student) con "
-        "persistenza temporale AR(1). La copula t introduce dipendenza di coda — scenari in cui "
-        "piu' fattori vanno male insieme — che la gaussiana sottostima.",
-        "Distribuzioni: le tre stime min/piano/max sono mappate su ciascuna distribuzione con "
-        "convenzioni esplicite. La lognormale adatta min e max come 5° e 95° percentile della "
-        "magnitudo (segno preservato); la normale centra sul valore 'piano' e ignora l'asimmetria.",
-        "Campionamento Latin Hypercube: stratifica le estrazioni riducendo la varianza delle "
-        "stime a parita' di simulazioni.",
-        "Intervalli di confidenza: calcolati per replicazione (piu' batch indipendenti), metodo "
-        "valido anche con LHS dove la formula std/√n non si applica.",
-        "Valore terminale: se calcolato con Gordon sull'ultimo anno e con shift attivo, l'ultimo "
-        "flusso puo' non rappresentare lo stato stazionario — valutare la normalizzazione.",
+        "persistenza temporale AR(1). La copula t introduce dipendenza di coda — scenari in cui piu' "
+        "fattori vanno male insieme — che la gaussiana sottostima.",
+        "Campionamento: Latin Hypercube (stratificato) di default, che riduce la varianza delle "
+        "stime a parita' di simulazioni rispetto al campionamento casuale.",
+        "Analisi di sensibilita': i driver dell'NPV sono ordinati per correlazione di rango "
+        "(Spearman) tra ciascun fattore e l'NPV; il tornado deterministico misura lo swing dell'NPV "
+        "variando un elemento alla volta tra percentile basso e alto.",
+        "Copertura del debito: DSCR = CFADS / servizio del debito (cassa disponibile prima del "
+        "servizio del debito su interessi piu' quota capitale); sotto 1 il flusso non copre il debito.",
+        "Piano di finanziamento (se attivo): senior debt ed equity sono derivati dal cronoprogramma "
+        "di capex secondo una leva obiettivo e un metodo di tiraggio; gli interessi in costruzione "
+        "possono essere capitalizzati. Il debito e' dimensionato sul caso base; i sovracosti di capex "
+        "sono a carico dell'equity.",
+        "Valore terminale (se attivo): Gordon sull'ultimo flusso o multiplo dell'EBITDA; con Gordon "
+        "e shift attivo l'ultimo flusso puo' non rappresentare lo stato stazionario.",
+        "Intervalli di confidenza (se calcolati): stimati per replicazione (piu' batch indipendenti), "
+        "metodo valido anche con Latin Hypercube dove la formula std/radice(n) non si applica.",
     ]
     for n in notes:
         para = doc.add_paragraph(style="List Bullet")
