@@ -188,12 +188,15 @@ def _chart_tornado(tor, currency):
 def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
                  reliability=None, author="Conflux", subtitle=None,
                  ai_commentary=False, llm_model="gpt-4o", llm_provider="openai",
-                 project_description=""):
+                 project_description="", commentary_text=None, api_key=None):
     """Costruisce il report Word e lo salva su `out` (path o file-like).
     reliability: output di core.estimate_with_ci (opzionale). Se presente, i risultati
     principali mostrano gli intervalli di confidenza.
     ai_commentary: se True, la sintesi e la discussione sono scritte da un LLM (GROUNDED
     sui numeri); se l'LLM non e' disponibile si usa automaticamente il testo template.
+    commentary_text: se gia' generato a monte (es. dall'app), viene riusato -> nessuna
+    seconda chiamata all'LLM. api_key: chiave passata esplicitamente (utile su Streamlit
+    Cloud dove le chiavi stanno in st.secrets, non nelle variabili d'ambiente).
     Le tabelle e i grafici restano SEMPRE deterministici (calcolati dal motore)."""
     npv = np.asarray(res["npv"], float)
     doc = Document()
@@ -233,13 +236,16 @@ def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
     # --- sintesi esecutiva (LLM se richiesto e disponibile, altrimenti template) ---
     commentary = None
     if ai_commentary:
-        try:
-            import llm_commentary
-            commentary = llm_commentary.generate_investment_commentary(
-                res, cfg, df, reliability=reliability, currency=currency,
-                model=llm_model, provider=llm_provider, project_description=project_description)
-        except Exception:
-            commentary = None
+        commentary = commentary_text          # riusa quello gia' generato (nessuna 2a chiamata)
+        if commentary is None:
+            try:
+                import llm_commentary
+                commentary = llm_commentary.generate_investment_commentary(
+                    res, cfg, df, reliability=reliability, currency=currency,
+                    model=llm_model, provider=llm_provider,
+                    project_description=project_description, api_key=api_key)
+            except Exception:
+                commentary = None
 
     if commentary:
         _add_markdown_block(doc, commentary)
