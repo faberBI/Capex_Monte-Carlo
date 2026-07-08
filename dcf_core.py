@@ -366,6 +366,21 @@ class SimConfig:
     # --- schema di campionamento ---
     sampling: str = "lhs"            # "lhs" (Latin Hypercube) | "random" (Monte Carlo puro)
 
+    # --- costo dell'investimento (capex): sovracosto stocastico ---
+    capex_overrun_enable: bool = False
+    capex_overrun: dict = field(default_factory=lambda: {"min": 0.95, "mode": 1.0, "max": 1.30})
+    dist_capex: dict = field(default_factory=lambda: {"dist": "pert"})
+
+    # --- piano di finanziamento (equity / senior debt) ---
+    funding_mode: str = "manual"     # "manual" (colonne Excel) | "derived" (dal piano)
+    gearing: float = 0.70            # quota senior debt sul fabbisogno di costruzione
+    draw_method: str = "pari_passu"  # "pari_passu" | "equity_first" | "debt_first"
+    idc_mode: str = "capitalize"     # "capitalize" (IDC sul debito) | "cash" | "none"
+    funding_rate: float = 0.0        # tasso senior debt (0 = usa la colonna Interest rate)
+    repay_years: int = 10            # tenor di ammortamento dopo l'entrata in esercizio (COD)
+    repay_profile: str = "linear"    # "linear" | "annuity"
+    grace_years: int = 0             # preammortamento (solo interessi) dopo il COD
+
     # --- performance ---
     irr_subsample: int = 3000        # n. simulazioni per la curva IRR (npf.irr e' lento)
 
@@ -373,10 +388,92 @@ class SimConfig:
 # ==========================================================================
 # 3b. PREPARAZIONE INPUT (parte deterministica: unica fonte di verita')
 # ==========================================================================
-def _prep_inputs(df):
+def build_funding_plan(capex, rate, gearing=0.70, method="pari_passu",
+                       idc="capitalize", repay_years=10, repay_profile="linear",
+                       grace_years=0):
+    """Deriva il PIANO DI FINANZIAMENTO (senior debt + equity) dal profilo di capex.
+
+    capex   : array per-anno (negativo = esborso di costruzione). Definisce il cronoprogramma.
+    rate    : tasso del senior debt (per IDC e interessi)
+    gearing : quota del fabbisogno di costruzione coperta da senior debt (es. 0.70)
+    method  : 'pari_passu' (proporzionale ogni anno) | 'equity_first' | 'debt_first'
+    idc     : 'capitalize' (interessi in costruzione sul debito) | 'cash' | 'none'
+    repay_* : ammortamento dopo l'entrata in esercizio (COD): 'linear' o 'annuity', con
+              eventuale preammortamento (grace_years)
+
+    Convenzione: senior debt ed equity in VALORE POSITIVO. Ritorna gli array debt_inflow
+    (drawdown, IDC incluso se capitalizzato), debt_repayment, equity (iniezioni) e la
+    diagnostica del piano. Il debito e' dimensionato sul caso base: gli eventuali sovracosti
+    di capex sono a carico dell'equity (assorbiti come FCFE piu' negativo)."""
+    capex = np.asarray(capex, float)
+    n = len(capex)
+    need = np.where(capex < 0.0, -capex, 0.0)          # fabbisogno di costruzione per anno
+    constr = need > 1e-12
+    z = np.zeros(n)
+    if not constr.any():
+        return {"debt_inflow": z, "debt_repayment": z.copy(), "equity": z.copy(),
+                "debt_at_cod": 0.0, "total_need": 0.0, "debt_capex": 0.0, "idc_total": 0.0,
+                "total_equity": 0.0, "cod_index": 0, "gearing_capex": 0.0}
+
+    last_c = int(np.max(np.nonzero(constr)[0]))         # ultimo anno di costruzione
+    total_need = float(need.sum())
+    g = float(np.clip(gearing, 0.0, 1.0))
+    debt_cap = g * total_need                           # tetto debito sul CAPEX (IDC escluso)
+    equity_cap = total_need - debt_cap
+
+    debt_draw = np.zeros(n); equity = np.zeros(n)
+    balance = 0.0; debt_used = 0.0; equity_used = 0.0
+    for t in range(n):
+        idc_amt = balance * rate if (idc == "capitalize" and t <= last_c) else 0.0
+        nd = need[t]
+        if method == "equity_first":
+            e = min(nd, max(equity_cap - equity_used, 0.0)); d = nd - e
+        elif method == "debt_first":
+            d = min(nd, max(debt_cap - debt_used, 0.0)); e = nd - d
+        else:  # pari_passu
+            d = g * nd; e = nd - d
+        debt_draw[t] = d + idc_amt                      # IDC capitalizzato entra nel drawdown
+        equity[t] = e
+        debt_used += d; equity_used += e
+        balance += debt_draw[t]
+
+    debt_at_cod = balance
+    repay = np.zeros(n)
+    start = last_c + 1 + int(max(grace_years, 0))
+    ny = max(int(repay_years), 1)
+    if repay_profile == "annuity" and rate > 0 and debt_at_cod > 0:
+        ann = rate * (1 + rate) ** ny / ((1 + rate) ** ny - 1)   # fattore di annualita'
+        service = debt_at_cod * ann
+        bal = debt_at_cod
+        for k in range(ny):
+            y = start + k
+            if y >= n or bal <= 1e-9:
+                break
+            repay[y] = max(min(service - bal * rate, bal), 0.0)  # quota capitale = rata - interessi
+            bal -= repay[y]
+    else:  # lineare: quota capitale costante
+        per = debt_at_cod / ny
+        for k in range(ny):
+            y = start + k
+            if y >= n:
+                break
+            repay[y] = per
+
+    return {"debt_inflow": debt_draw, "debt_repayment": repay, "equity": equity,
+            "debt_at_cod": debt_at_cod, "total_need": total_need,
+            "debt_capex": float(debt_used), "idc_total": float(debt_at_cod - debt_used),
+            "total_equity": float(equity.sum()), "cod_index": last_c + 1,
+            "gearing_capex": float(debt_used / total_need) if total_need > 0 else 0.0}
+
+
+def _prep_inputs(df, cfg=None):
     """Legge dal DataFrame tutte le grandezze deterministiche e le terne (min/mode/max),
     e calcola una sola volta lo schema del debito. Usato sia dalla simulazione sia
-    dalle analisi di sensibilita', cosi' non possono divergere."""
+    dalle analisi di sensibilita', cosi' non possono divergere.
+
+    Se cfg.funding_mode == 'derived', il debito (drawdown + rimborsi) e l'iniezione di
+    equity vengono DERIVATI dal piano di finanziamento a partire dal capex, sovrascrivendo
+    le colonne di debito manuali dell'Excel."""
     years = df.shape[0]
 
     def trip(key):
@@ -397,6 +494,19 @@ def _prep_inputs(df):
     debt_repayment = _col(df, SINGLE_COLS["debt_repayment"], 0.0, years)
     interest_rate  = _col(df, SINGLE_COLS["interest_rate"], 0.05, years)
 
+    # --- piano di finanziamento derivato (equity / senior debt) ---
+    equity_injection = None
+    funding = None
+    if cfg is not None and getattr(cfg, "funding_mode", "manual") == "derived":
+        r_sr = float(cfg.funding_rate) if getattr(cfg, "funding_rate", 0.0) else float(np.mean(interest_rate))
+        funding = build_funding_plan(capex, r_sr, cfg.gearing, cfg.draw_method,
+                                     cfg.idc_mode, cfg.repay_years, cfg.repay_profile,
+                                     cfg.grace_years)
+        debt_inflow = funding["debt_inflow"]
+        debt_repayment = funding["debt_repayment"]
+        interest_rate = np.full(years, r_sr)            # tasso senior costante
+        equity_injection = funding["equity"]
+
     interest = np.zeros(years)
     stock = 0.0
     for y in range(years):
@@ -412,6 +522,7 @@ def _prep_inputs(df):
         "costs_fixed": costs_fixed, "amort": amort, "capex": capex, "change_wc": change_wc,
         "debt_inflow": debt_inflow, "debt_repayment": debt_repayment,
         "interest": interest, "net_borrowing": debt_inflow - debt_repayment, "debt_end": stock,
+        "equity_injection": equity_injection, "funding": funding,
     }
 
 
@@ -420,7 +531,7 @@ def _prep_inputs(df):
 # ==========================================================================
 def run_simulations(df, cfg: SimConfig):
     rng = np.random.default_rng(None if cfg.seed == 0 else int(cfg.seed))
-    prep = _prep_inputs(df)
+    prep = _prep_inputs(df, cfg)
     years = prep["years"]
     years_col = prep["years_col"]
     n_sim = int(cfg.n_sim)
@@ -453,6 +564,20 @@ def run_simulations(df, cfg: SimConfig):
     cs_orig      = sample_marginal(u[:, :, 1], cfg.dist_cost, cs_lo, cs_mid, cs_hi)
     disposal     = sample_marginal(u[:, :, 2], cfg.dist_disposal, dp_lo, dp_mid, dp_hi)  # non shiftato
     capex_orig   = np.broadcast_to(capex, (n_sim, years)).copy()
+
+    # ---- SOVRACOSTO CAPEX (moltiplicatore a livello progetto, per simulazione) ----
+    # Il debito e' dimensionato sul caso base: un sovracosto di capex fa crescere l'esborso
+    # ma NON il drawdown del debito -> lo assorbe l'equity (FCFE piu' negativo). Realistico:
+    # la linea senior e' committata sul piano base, gli overrun sono a carico degli sponsor.
+    capex_mult = None
+    if getattr(cfg, "capex_overrun_enable", False):
+        ov = cfg.capex_overrun
+        u_cx = (_lhs_uniform(n_sim, 1, rng).ravel() if str(cfg.sampling).lower() == "lhs"
+                else rng.random(n_sim))
+        capex_mult = sample_marginal(u_cx, cfg.dist_capex,
+                                     float(ov.get("min", 0.95)), float(ov.get("mode", 1.0)),
+                                     float(ov.get("max", 1.30)))
+        capex_orig = capex_orig * capex_mult[:, None]
 
     # ---- SHIFT temporale a livello di PROGETTO ----
     # Un'unica estrazione di ritardo per (sim, anno) applicata a ricavi, costi e capex:
@@ -552,6 +677,8 @@ def run_simulations(df, cfg: SimConfig):
     }
     if cfg.enable_shift and delay_severity is not None:
         driver_samples["Ritardo (anni)"] = delay_severity.astype(float)
+    if capex_mult is not None:
+        driver_samples["Costo investimento"] = capex_mult   # >1 = sovracosto -> NPV giu'
 
     return {
         "years_col": years_col,
@@ -567,6 +694,8 @@ def run_simulations(df, cfg: SimConfig):
         "debt_end": debt_end,
         "framework": cfg.framework.upper(),
         "driver_samples": driver_samples,
+        "funding": prep.get("funding"),
+        "equity_injection": prep.get("equity_injection"),
         # medie per il grafico "originale vs shift"
         "revenue_orig_mean": revenue_orig.mean(axis=0),
         "revenue_shift_mean": revenue.mean(axis=0),
@@ -708,7 +837,7 @@ def tornado_oneway(df, cfg, p_low=0.10, p_high=0.90,
     - Ritardo: da 0 al ritardo massimo previsto.
     - Ipotesi scalari (opz.): tasso di sconto, aliquota, valore terminale.
     """
-    prep = _prep_inputs(df)
+    prep = _prep_inputs(df, cfg)
     rev0 = prep["revenue"][1]; cost0 = prep["cost"][1]; disp0 = prep["disposal"][1]
     capex0 = prep["capex"]
 
@@ -729,6 +858,17 @@ def tornado_oneway(df, cfg, p_low=0.10, p_high=0.90,
         bars.append({"label": label,
                      "low": npv_of(**{kw_lo: flo}),
                      "high": npv_of(**{kw_lo: fhi})})
+
+    # --- sovracosto dell'investimento (capex): debito fisso, equity assorbe ---
+    if getattr(cfg, "capex_overrun_enable", False):
+        ov = cfg.capex_overrun
+        m_lo = float(sample_marginal(np.array([p_low]), cfg.dist_capex,
+                     float(ov.get("min", 0.95)), float(ov.get("mode", 1.0)), float(ov.get("max", 1.30)))[0])
+        m_hi = float(sample_marginal(np.array([p_high]), cfg.dist_capex,
+                     float(ov.get("min", 0.95)), float(ov.get("mode", 1.0)), float(ov.get("max", 1.30)))[0])
+        bars.append({"label": "Costo investimento (capex)",
+                     "low": npv_of(capex=capex0 * m_lo),
+                     "high": npv_of(capex=capex0 * m_hi)})
 
     # --- ritardo di progetto ---
     if cfg.enable_shift:
@@ -802,7 +942,7 @@ def two_way_sensitivity(df, cfg, x_param, x_values, y_param, y_values):
     """Griglia di NPV (deterministico, fattori al 'piano') al variare di DUE ipotesi.
     param ammessi: vedi TWO_WAY_PARAMS. Gli 'scale_*' sono moltiplicatori (1.0 = piano).
     Ritorna una matrice [len(y_values), len(x_values)]."""
-    prep = _prep_inputs(df)
+    prep = _prep_inputs(df, cfg)
     rev0 = prep["revenue"][1]; cost0 = prep["cost"][1]; disp0 = prep["disposal"][1]
     capex0 = prep["capex"]
 
@@ -1145,6 +1285,23 @@ if __name__ == "__main__":
     print(f"         {ci['total_n']:,} sim: VaR 99% = {m['value']:.1f} ± {m['half_width']:.1f} "
           f"(IC95 {m['ci_low']:.1f}..{m['ci_high']:.1f})  "
           f"{'OK' if m['half_width'] > 0 and m['ci_low'] < m['value'] < m['ci_high'] else 'FAIL'}")
+
+    # ---- TEST 10: piano di finanziamento (equity/senior debt) + sovracosto capex ----
+    print("\n[TEST 10] Piano di finanziamento + costo investimento")
+    fp = build_funding_plan(np.array([-200.0, -100.0, 0, 0, 0, 0]), rate=0.05, gearing=0.70,
+                            method="pari_passu", idc="capitalize", repay_years=3)
+    print(f"         gearing capex={fp['gearing_capex']:.0%} | debito capex={fp['debt_capex']:.0f} | "
+          f"equity={fp['total_equity']:.0f} | IDC={fp['idc_total']:.2f} | debito a COD={fp['debt_at_cod']:.2f}")
+    print(f"         {'OK' if abs(fp['gearing_capex']-0.70)<1e-9 and abs(fp['debt_repayment'].sum()-fp['debt_at_cod'])<1e-6 and fp['idc_total']>0 else 'FAIL'}")
+    cfg_f = SimConfig(n_sim=30000, seed=3, framework="FCFE", tv_method="none",
+                      funding_mode="derived", gearing=0.70, funding_rate=0.05, repay_years=4,
+                      capex_overrun_enable=True, capex_overrun={"min": 0.95, "mode": 1.0, "max": 1.35})
+    rf = run_simulations(df, cfg_f)
+    imp = driver_importance(rf)
+    cx = [d for d in imp if d["driver"] == "Costo investimento"]
+    print(f"         funding derivato: has_debt={rf['has_debt']}, equity_inj piano={np.round(rf['equity_injection'],0)}")
+    print(f"         driver capex: rho={cx[0]['spearman']:+.2f} (atteso < 0)  "
+          f"{'OK' if cx and cx[0]['spearman'] < 0 and rf['equity_injection'] is not None else 'FAIL'}")
 
     print("\n" + "=" * 70)
     print("Metriche di sintesi (FCFE, con Gordon):")
