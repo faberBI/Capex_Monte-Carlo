@@ -186,7 +186,7 @@ def _chart_tornado(tor, currency):
 # costruzione report
 # ==========================================================================
 def build_report(df, cfg, res, out, project_name="Progetto", currency="€",
-                 reliability=None, author="Conflux", subtitle=None,
+                 reliability=None, author="Fabrizio Di Sciorio, PhD", subtitle=None,
                  ai_commentary=False, llm_model="gpt-4o", llm_provider="openai",
                  project_description="", commentary_text=None, api_key=None):
     """Costruisce il report Word e lo salva su `out` (path o file-like).
