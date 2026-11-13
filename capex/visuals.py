@@ -250,3 +250,35 @@ def plot_cashflows(yearly_cash_flows, years, name):
         high_cf = yearly_cash_flows
     else:
         mean_cf = np.mean(yearly_cash_flows, axis=0)
+        low_cf = np.percentile(yearly_cash_flows, 5, axis=0)   # 5° percentile
+        high_cf = np.percentile(yearly_cash_flows, 95, axis=0) # 95° percentile
+
+    # Crea l'asse temporale (da 1 a years)
+    x_years = np.arange(1, years + 1)
+
+    # 1. Crea figura e assi esplicitamente
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # 2. Disegna la media e l'intervallo di confidenza
+    ax.plot(x_years, mean_cf, label="FCF Medio", color="#1f77b4", linewidth=2)
+    
+    if yearly_cash_flows.ndim > 1:
+        ax.fill_between(
+            x_years, 
+            low_cf, 
+            high_cf, 
+            color="#1f77b4", 
+            alpha=0.2, 
+            label="Intervallo 5° - 95° percentile"
+        )
+
+    # 3. Formattazione del grafico
+    ax.axhline(0, color="black", linestyle="--", linewidth=0.8)
+    ax.set_title(f"Proiezione Flussi di Cassa - {name}")
+    ax.set_xlabel("Anno")
+    ax.set_ylabel("Free Cash Flow (FCF)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # 4. Fondamentale: restituisci fig
+    return fig
